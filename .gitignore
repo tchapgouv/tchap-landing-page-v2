@@ -148,5 +148,5 @@ dmypy.json
 
 # Project-specific stuff
 config.json
-cron.json
+# cron.json
 temp.json
