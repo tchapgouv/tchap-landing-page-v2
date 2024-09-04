@@ -1,6 +1,7 @@
 from django.db import models
-from django.forms.widgets import Textarea
+from django.forms.widgets import Textarea, mark_safe
 from django.utils.translation import gettext_lazy as _
+from dsfr.constants import NOTICE_TYPE_CHOICES
 from modelcluster.fields import ParentalKey
 from modelcluster.models import ClusterableModel
 from modelcluster.tags import ClusterTaggableManager
@@ -59,31 +60,45 @@ class MonospaceField(models.TextField):
 
 
 @register_setting(icon="code")
-class AnalyticsSettings(BaseSiteSetting):
+class CustomScriptsSettings(BaseSiteSetting):
     class Meta:
-        verbose_name = "Scripts de suivi"
+        verbose_name = _("Custom scripts")
 
     head_scripts = MonospaceField(
         blank=True,
         null=True,
-        verbose_name="Scripts de suivi <head>",
-        help_text="Ajoutez des scripts de suivi entre les balises <head>.",
+        verbose_name=_("Scripts in the <head> section"),
+        help_text=_("Allows for scripts to be placed in the <head> tag of the website pages."),
     )
 
     body_scripts = MonospaceField(
         blank=True,
         null=True,
-        verbose_name="Scripts de suivi <body>",
-        help_text="Ajoutez des scripts de suivi vers la fermeture de la balise <body>.",
+        verbose_name=_("Scripts in the <body> section"),
+        help_text=_("Allows for scripts to be placed at the end of the <body> tag of the website pages."),
+    )
+
+    use_tarteaucitron = models.BooleanField(
+        _("Use Tarteaucitron?"),
+        default=False,
+        help_text=mark_safe(
+            _(
+                'See <a href="https://sites-faciles.beta.numerique.gouv.fr/documentation/gestion-des-cookies/">Documentation</a>'
+            )
+        ),
     )
 
     panels = [
         MultiFieldPanel(
             [
+                FieldPanel(
+                    "use_tarteaucitron",
+                ),
                 FieldPanel("head_scripts"),
                 FieldPanel("body_scripts"),
             ],
-            heading="Scripts de suivi",
+            heading=_("Custom scripts"),
+            help_text=_("Allows to add custom CSS and JS to the site, for example for Matomo, Tarteaucitron…"),
         ),
     ]
 
@@ -98,7 +113,11 @@ class CmsDsfrConfig(ClusterableModel, BaseSiteSetting):
         _("Institution (header)"),
         max_length=200,
         default="Intitulé officiel",
-        help_text=_("Institution brand as defined on page https://www.info.gouv.fr/marque-de-letat/le-bloc-marque"),
+        help_text=mark_safe(
+            _(
+                'Institution brand as defined on <a href="https://www.info.gouv.fr/marque-de-letat/le-bloc-marque">official page</a>.'  # noqa
+            )
+        ),
         blank=True,
     )
     header_brand_html = models.CharField(
@@ -135,16 +154,50 @@ class CmsDsfrConfig(ClusterableModel, BaseSiteSetting):
         blank=True,
     )
 
-    notice = RichTextField(
-        _("Important notice"),
+    notice_title = RichTextField(
+        _("Notice title"),
         default="",
         blank=True,
         features=LIMITED_RICHTEXTFIELD_FEATURES,
-        help_text=_(
-            "The important notice banner should only be used for essential and temporary information. \
-            (Excessive or continuous use risks “drowning” the message.)"
+        help_text=_("Can include HTML"),
+    )
+
+    notice_description = RichTextField(
+        _("Notice description"),
+        default="",
+        blank=True,
+        help_text=_("Can include HTML"),
+    )
+    notice_type = models.CharField(
+        _("Notice type"),
+        choices=NOTICE_TYPE_CHOICES,
+        default="info",
+        blank=True,
+        max_length=20,
+        help_text=mark_safe(
+            _(
+                'Use is strictly regulated, see \
+            <a href="https://www.systeme-de-design.gouv.fr/composants-et-modeles/composants/bandeau-d-information-importante/">documentation</a>.'
+            )
         ),
     )
+
+    notice_link = models.URLField(
+        _("Notice link"),
+        default="",
+        blank=True,
+        help_text=_("Standardized consultation link at the end of the notice."),
+    )
+
+    notice_icon_class = models.CharField(
+        _("Notice icon class"),
+        max_length=200,
+        default="",
+        blank=True,
+        help_text=_("For weather alerts only"),
+    )
+
+    notice_is_collapsible = models.BooleanField(_("Collapsible?"), default=False)  # type: ignore
 
     beta_tag = models.BooleanField(_("Show the BETA tag next to the title"), default=False)
 
@@ -199,7 +252,21 @@ class CmsDsfrConfig(ClusterableModel, BaseSiteSetting):
         FieldPanel("site_title"),
         FieldPanel("site_tagline"),
         FieldPanel("footer_description"),
-        FieldPanel("notice"),
+        MultiFieldPanel(
+            [
+                FieldPanel("notice_title"),
+                FieldPanel("notice_description"),
+                FieldPanel("notice_type"),
+                FieldPanel("notice_link"),
+                FieldPanel("notice_icon_class", widget=DsfrIconPickerWidget),
+                FieldPanel("notice_is_collapsible"),
+            ],
+            heading=_("Important notice"),
+            help_text=_(
+                "The important notice banner should only be used for essential and temporary information. \
+                (Excessive or continuous use risks “drowning” the message.)"
+            ),
+        ),
         MultiFieldPanel(
             [
                 FieldPanel("operator_logo_file"),
