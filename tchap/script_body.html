@@ -1,0 +1,89 @@
+<script>
+// Variables to mimic state
+let textFieldValue = '';
+let isTested = false;
+let isWled = false;
+let errorText = '';
+let disabled = true;
+
+const emailInput = document.getElementById('test-your-email');
+const verifyButton = document.getElementById('verify-button');
+const resultBlock = document.getElementById('result-block');
+
+// Email regex for validation
+const emailRegex = /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
+
+// Handle input change
+emailInput.addEventListener('loading', function(e) {
+    // initial value
+    textFieldValue = e.target.value;  
+});
+emailInput.addEventListener('input', function(e) {
+    textFieldValue = e.target.value;
+    disabled = !emailRegex.test(String(textFieldValue).toLowerCase());
+    verifyButton.disabled = disabled;
+    isTested = false;
+    errorText = '';
+    resultBlock.innerHTML = ''; // Clear result block
+});
+
+// Handle Enter key for email verification
+emailInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+    e.preventDefault();
+    analyzeEmail();
+    }
+});
+
+// Handle click on verify button
+verifyButton.addEventListener('click', function() {
+    analyzeEmail();
+});
+
+// Function to simulate email analysis
+function analyzeEmail() {
+    textFieldValue = emailInput.value;
+    if (textFieldValue) {
+    fetch(`https://matrix.agent.tchap.gouv.fr/_matrix/identity/api/v1/info?medium=email&address=${encodeURIComponent(textFieldValue.toLowerCase().trim())}`)
+        .then(response => response.json())
+        .then(data => {
+        isWled = data.hs !== 'agent.externe.tchap.gouv.fr';
+        isTested = true;
+        updateResult();
+        })
+        .catch(error => {
+        errorText = 'Erreur : Impossible de joindre le serveur';
+        isTested = true;
+        isWled = false;
+        updateResult();
+        });
+    } 
+}
+
+// Function to update the result based on analysis
+function updateResult() {
+    let colorClass = 'tc_TestYourEmail_btn';
+    let resultHTML = '';
+
+    if (errorText) {
+    resultHTML = `<div class="tc_TestYourEmail_error_text">${errorText}</div>`;
+    } else if (isTested && isWled) {
+    colorClass += ' tc_TestYourEmail_btn_valid';
+    resultHTML = `
+        <div class="tc_TestYourEmail_email_text">Votre administration est présente sur Tchap !</div>
+        <button class="fr-btn fr-btn--tertiary" onclick="window.open('https://www.tchap.gouv.fr/#/welcome', '_blank')">Inscrivez-vous</button>
+    `;
+    } else if (isTested && !isWled) {
+    resultHTML = `
+        <div class="tc_TestYourEmail_email_text">Votre administration n'est pas encore présente sur Tchap !</div>
+        <ol class="tc_TestYourEmail_invalid_list">
+        <li>Demandez l'accès à Tchap pour votre administration via <a href="https://www.demarches-simplifiees.fr/commencer/utiliser-tchap" target="_blank">ce formulaire</a>.</li>
+        <li>L'équipe Tchap ouvrira l'accès à votre administration si toutes les conditions sont remplies (délai : environ 15 jours)</li>
+        <li>Les agents de votre administration pourront ensuite s'inscrire et communiquer sur Tchap.</li>
+        </ol>
+    `;
+    }
+
+    resultBlock.innerHTML = resultHTML;
+}
+</script>
