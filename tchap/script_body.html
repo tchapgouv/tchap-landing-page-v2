@@ -11,7 +11,7 @@ const verifyButton = document.getElementById('verify-button');
 const resultBlock = document.getElementById('result-block');
 
 // Email regex for validation
-const emailRegex = /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
+const emailRegex =  /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,})|@[a-zA-Z0-9\-._~!$&'()*+,;=:]+(\.[a-zA-Z0-9\-._~!$&'()*+,;=:]+)*$/;
 
 // Handle input change
 emailInput.addEventListener('loading', function(e) {
@@ -29,7 +29,7 @@ emailInput.addEventListener('input', function(e) {
 
 // Handle Enter key for email verification
 emailInput.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !disabled) {
     e.preventDefault();
     analyzeEmail();
     }
@@ -43,19 +43,21 @@ verifyButton.addEventListener('click', function() {
 // Function to simulate email analysis
 function analyzeEmail() {
     textFieldValue = emailInput.value;
+    const externeHs = 'agent.externe.tchap.gouv.fr';
+
     if (textFieldValue) {
     fetch(`https://matrix.agent.tchap.gouv.fr/_matrix/identity/api/v1/info?medium=email&address=${encodeURIComponent(textFieldValue.toLowerCase().trim())}`)
         .then(response => response.json())
         .then(data => {
-        isWled = data.hs !== 'agent.externe.tchap.gouv.fr';
-        isTested = true;
-        updateResult();
+            isWled = data.hs !== externeHs || (data.new_hs && data.new_hs !== externeHs);
+            isTested = true;
+            updateResult();
         })
         .catch(error => {
-        errorText = 'Erreur : Impossible de joindre le serveur';
-        isTested = true;
-        isWled = false;
-        updateResult();
+            errorText = 'Erreur : Impossible de joindre le serveur';
+            isTested = true;
+            isWled = false;
+            updateResult();
         });
     } 
 }
