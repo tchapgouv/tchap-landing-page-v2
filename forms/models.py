@@ -10,6 +10,9 @@ from wagtail.contrib.forms.forms import BaseForm, FormBuilder
 from wagtail.contrib.forms.models import AbstractEmailForm, AbstractFormField
 from wagtail.contrib.forms.panels import FormSubmissionsPanel
 from wagtail.fields import RichTextField
+from wagtail_honeypot.models import HoneypotFormMixin, HoneypotFormSubmissionMixin
+
+from forms.widgets import CustomEmailInputWidget
 
 
 class FormField(AbstractFormField):
@@ -64,11 +67,15 @@ class SitesFacilesFormBuilder(FormBuilder):
         options["widget"] = forms.DateInput(attrs={"type": "datetime-local"})
         return forms.DateField(**options)
 
+    def create_email_field(self, field, options):
+        options["widget"] = CustomEmailInputWidget
+        return super().create_email_field(field, options)
+
     def get_form_class(self):
         return type("WagtailForm", (SitesFacilesCustomForm,), self.formfields)
 
 
-class FormPage(AbstractEmailForm):
+class FormPage(HoneypotFormMixin, HoneypotFormSubmissionMixin, AbstractEmailForm):
     intro = RichTextField(blank=True)
     thank_you_text = RichTextField(blank=True)
 
@@ -92,6 +99,15 @@ class FormPage(AbstractEmailForm):
         ),
     ]
 
+    honeypot_panels = [
+        MultiFieldPanel(
+            [FieldPanel("honeypot")],
+            heading=_("Reduce Form Spam"),
+        )
+    ]
+
+    promote_panels = AbstractEmailForm.promote_panels + honeypot_panels
+
     api_fields = [
         APIField("intro"),
         APIField("thank_you_text"),
@@ -103,3 +119,9 @@ class FormPage(AbstractEmailForm):
         verbose_name_plural = _("Form pages")
 
     form_builder = SitesFacilesFormBuilder
+
+    def all_fields_required(self):
+        """
+        Returns True if all fields in the form are mandatory.
+        """
+        return all(field.get("required", False) for field in self.form_fields.values())
