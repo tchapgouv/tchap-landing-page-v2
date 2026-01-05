@@ -11,7 +11,7 @@
         {{ settings.content_manager.CmsDsfrConfig.footer_brand_html| default_if_none:'république<br />française' | safe }}
       </p>
       <a class="fr-footer__brand-link"
-         href="/"
+         href="{% root_url %}"
          title="{{ back_to_home_label }} - {{ settings.content_manager.CmsDsfrConfig.operator_logo_alt }} - {{ settings.content_manager.CmsDsfrConfig.footer_brand|default:'république française' }}">
         <img class="fr-footer__logo"
              src="{{ logo_img.url }}"
@@ -23,7 +23,7 @@
   {% else %}
     <div class="fr-footer__brand fr-enlarge-link">
       <a id="footer-operator"
-         href="/"
+         href="{% root_url %}"
          title="{{ back_to_home_label }} - {{ settings.content_manager.CmsDsfrConfig.site_title }} - {{ settings.content_manager.CmsDsfrConfig.footer_brand|default:'république française' }}">
         {% block brand %}
           <p class="fr-logo">
@@ -69,7 +69,7 @@
 {% block footer_bottom_extra %}
   {% translate "Opens a new window" as new_window %}
   <span class="cmsfr-footer__bottom-extra">
-    {% translate "This website is made with" %} <a href="https://sites-faciles.beta.numerique.gouv.fr/?mtm_campaign=footer-link"
+    {% translate "This website is made with" %} <a href="https://sites.beta.gouv.fr/?mtm_campaign=footer-link"
     target="_blank"
     rel="noopener external"
     title="Sites faciles - {{ new_window }}">Sites faciles</a>

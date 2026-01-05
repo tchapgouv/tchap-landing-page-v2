@@ -1,24 +1,25 @@
+from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from django.views.generic import ListView, TemplateView
 from unidecode import unidecode
-from wagtail.models import Site
+from wagtail.models import Page, Site
 
 from content_manager.models import ContentPage, Tag
 
 
 class SearchResultsView(ListView):
-    model = ContentPage
+    model = Page
     template_name = "content_manager/search_results.html"
 
     def get_queryset(self):
         query = self.request.GET.get("q", None)
         if query:
-            object_list = ContentPage.objects.live().search(query)
+            object_list = Page.objects.live().search(query)
 
         else:
-            object_list = ContentPage.objects.none()
+            object_list = Page.objects.none()
         return object_list
 
     def get_context_data(self, **kwargs):
@@ -46,9 +47,12 @@ class TagsListView(TemplateView):
 
         title = _("Tags")
         context["title"] = title
+        script_name = settings.FORCE_SCRIPT_NAME or ""
+        root_dir = f"{script_name.rstrip('/')}/" if script_name else "/"
         context["breadcrumb"] = {
             "links": [],
             "current": title,
+            "root_dir": root_dir,
         }
         context["search_description"] = _("List of all the tags.")
 
@@ -98,11 +102,14 @@ class SiteMapView(TemplateView):
         site = Site.find_for_request(self.request)
         context["home_page"] = site.root_page
 
+        script_name = settings.FORCE_SCRIPT_NAME or ""
+        root_dir = f"{script_name.rstrip('/')}/" if script_name else "/"
         title = _("Sitemap")
         context["title"] = title
 
         context["breadcrumb"] = {
             "links": [],
             "current": title,
+            "root_dir": root_dir,
         }
         return context

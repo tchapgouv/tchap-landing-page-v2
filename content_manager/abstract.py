@@ -9,7 +9,8 @@ from wagtail.images.api.fields import ImageRenditionField
 from wagtail.models import Page
 from wagtail.search import index
 
-from content_manager.blocks import STREAMFIELD_COMMON_BLOCKS, ButtonsHorizontalListBlock
+from content_manager.blocks.buttons_links import ButtonsHorizontalListBlock
+from content_manager.blocks.core import HERO_STREAMFIELD_BLOCKS, STREAMFIELD_COMMON_BLOCKS
 from content_manager.utils import get_streamfield_raw_text
 
 
@@ -18,6 +19,8 @@ class SitesFacilesBasePage(Page):
     This class defines a base page model that will be used
     by all pages in Sites Faciles
     """
+
+    hero = StreamField(HERO_STREAMFIELD_BLOCKS, blank=True, use_json_field=True, max_num=1)
 
     body = StreamField(
         STREAMFIELD_COMMON_BLOCKS,
@@ -90,20 +93,13 @@ class SitesFacilesBasePage(Page):
     )
 
     content_panels = Page.content_panels + [
-        MultiFieldPanel(
-            [
-                FieldPanel("header_with_title"),
-                FieldPanel("header_image"),
-                FieldPanel("header_color_class"),
-                FieldPanel("header_large"),
-                FieldPanel("header_darken"),
-                FieldPanel("header_cta_text"),
-                FieldPanel(
-                    "header_cta_buttons",
-                    heading=_("Call-to-action buttons"),
-                ),
-            ],
-            heading=_("Header options"),
+        FieldPanel(
+            "hero",
+            heading=_("Hero"),
+            help_text=_(
+                "Header section of the page. If empty, no header is displayed "
+                "and the page title appears at the top of the content."
+            ),
         ),
         FieldPanel("body", heading=_("Body")),
     ]
@@ -120,6 +116,7 @@ class SitesFacilesBasePage(Page):
 
     # Export fields over the API
     api_fields = [
+        APIField("hero"),
         APIField("body"),
         APIField("header_image"),
         APIField("header_image_render", serializer=ImageRenditionField("fill-1200x630", source="header_image")),
@@ -151,6 +148,36 @@ class SitesFacilesBasePage(Page):
     def get_preview_image(self):
         return self.preview_image or self.header_image
 
+    @property
+    def show_title(self):
+        for block in self.hero:
+            if block.block_type != "old_hero":
+                return False
+
+            if block.value.get("header_with_title") is True:
+                return False
+        return True
+
+    @property
+    def cover(self):
+        hero_blocks = getattr(self, "hero", None)
+
+        if not hero_blocks:
+            return None
+
+        first_hero = hero_blocks[0].value or {}
+
+        if "image" in first_hero:
+            image_block = first_hero.get("image")
+            if isinstance(image_block, dict) and "image" in image_block:
+                return image_block.get("image")
+            return image_block
+
+        if "header_image" in first_hero:
+            return first_hero.get("header_image")
+
+        return None
+
     def get_absolute_url(self):
         return self.url
 
@@ -160,6 +187,8 @@ class SitesFacilesBasePage(Page):
             if search_description:
                 self.search_description = search_description
         return super().save(*args, **kwargs)
+
+    exclude_fields_in_copy = ["source_url"]
 
     class Meta:
         abstract = True

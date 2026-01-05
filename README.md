@@ -10,7 +10,7 @@ En particulier, il permet de **construire des pages à l’aide de composants** 
 Sites Faciles vise à utiliser les dernières versions disponibles de [Django (5.0+)](https://www.djangoproject.com/download/) et [Wagtail](https://docs.wagtail.org/en/stable/releases/upgrading.html).
 
 Les tests automatisés couvrent les versions suivantes :
-- Python 3.10 à 3.13 (cf. [versions de Python supportées par Django](https://docs.djangoproject.com/en/5.1/faq/install/))
+- Python 3.10 à 3.14 (cf. [versions de Python supportées par Django](https://docs.djangoproject.com/en/5.2/faq/install/))
 - PostgreSQL 14 à 17 (cf. [versions de PostgreSQL supportées par Django](https://code.djangoproject.com/wiki/SupportedDatabaseVersions))
 
 ## Installation et contribution
@@ -38,6 +38,7 @@ Sites Faciles est développé en utilisant le framework [Django](https://www.dja
 En plus des applications déjà citées, le dépôt contient les répertoires suivants :
 - **config** : le projet Django proprement dit
 - **locale** : la traduction des templates de base et du JS global du site (cf. ci-dessous.) La localisation des apps listées plus haut se fait à l’intérieur de celles-ci.
+- **scripts** : scripts shell utilisés par certaines commandes et fichiers de configurations associés.
 - **static** : des fichiers statiques communs à l’ensemble du site (CSS global, JS global, quelques images intégrées par défaut) ainsi que la librairie tierce TarteaucitronJS (utilisée pour la gestion des cookies tiers)
 - **templates** : les templates de base du site.
 

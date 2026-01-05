@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.templatetags.static import static
 from django.urls import reverse
 from django.utils.html import escape, format_html
@@ -14,6 +15,11 @@ def global_admin_css():
     return format_html('\n<link rel="stylesheet" href="{}">', static("css/admin.css"))
 
 
+@hooks.register("register_icons")
+def register_icons(icons):
+    return icons + ["admin_icons/anchor.svg"]
+
+
 @hooks.register("insert_editor_js")
 def insert_custom_editor_scripts():
     return format_html(
@@ -28,9 +34,10 @@ def insert_custom_editor_scripts():
 
 @hooks.register("register_admin_menu_item")
 def register_site_menu_item():
+    index_url = f"{settings.FORCE_SCRIPT_NAME or ''}/"
     return MenuItem(
         _("Visit site"),
-        "/",
+        index_url,
         icon_name="home",
         order=0,
     )
@@ -88,4 +95,5 @@ def remove_all_summary_items(request, items):
 @hooks.register("construct_homepage_panels")
 def add_shortcuts_panel(request, panels):
     panels.append(ShortcutsPanel())
-    panels.append(TutorialsPanel())
+    if not settings.SF_DISABLE_TUTORIALS:
+        panels.append(TutorialsPanel())

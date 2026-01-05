@@ -1,4 +1,3 @@
-from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
 from django.urls import reverse
@@ -26,6 +25,9 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **kwargs):
+        call_command("import_dsfr_pictograms")
+        call_command("import_illustration_images")
+
         slugs = kwargs.get("slug")
 
         if not slugs:
@@ -45,10 +47,6 @@ class Command(BaseCommand):
                 call_command("set_config")
 
             slugs = ALL_ALLOWED_SLUGS
-
-        pictograms_exist = Image.objects.filter(title__contains="Pictogrammes DSFR").count()
-        if not pictograms_exist:
-            call_command("import_dsfr_pictograms")
 
         for slug in slugs:
             if slug == "home":
@@ -124,7 +122,8 @@ class Command(BaseCommand):
         <p>Vous pouvez maintenant vous connecter dans l’administration et personnaliser le site.</p>
         """
 
-        admin_url = f"{settings.WAGTAILADMIN_BASE_URL}{reverse('wagtailadmin_home')}"
+        # Use the reversed admin path directly to avoid duplicating the script_name
+        admin_url = reverse("wagtailadmin_home")
 
         image_and_text_block = {
             "image": image,
