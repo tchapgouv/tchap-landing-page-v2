@@ -50,19 +50,26 @@ class TutorialsPanel(Component):
                     "https://sites.beta.gouv.fr/api/v2/pages/",
                     params={
                         "child_of": 107,
-                        "fields": "title,preview_image_render,html_url",
                     },
                     timeout=5,
                 )
                 res.raise_for_status()
-                tutorials = [
-                    {
-                        "title": page["title"],
-                        "image": page["preview_image_render"]["full_url"],
-                        "url": page["meta"]["html_url"],
-                    }
-                    for page in res.json()["items"]
-                ]
+                tutorials = []
+                for page in res.json()["items"]:
+                    page_res = requests.get(
+                        f'https://sites.beta.gouv.fr/api/v2/pages/{page["id"]}/',
+                        params={"fields": "title,preview_image_render,-body"},
+                        timeout=5,
+                    )
+                    page_res.raise_for_status()
+                    page_data = page_res.json()
+                    tutorials.append(
+                        {
+                            "title": page_data["title"],
+                            "image": page_data["preview_image_render"]["full_url"],
+                            "url": page_data["meta"]["html_url"],
+                        }
+                    )
             except requests.RequestException:
                 tutorials = []
 
