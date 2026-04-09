@@ -71,7 +71,7 @@ def language_selector(context: Context) -> dict:
             {
                 "language_code": default_locale.language_code,
                 "language_name": default_locale.language_name_localized,
-                "url": homepage.full_url,
+                "url": homepage.get_full_url(request=request),
             }
         ]
 
@@ -80,7 +80,7 @@ def language_selector(context: Context) -> dict:
                 {
                     "language_code": t.locale.language_code,
                     "language_name": t.locale.language_name_localized,
-                    "url": t.full_url,
+                    "url": t.get_full_url(request=request),
                 }
             )
     elif mode == "manual":
