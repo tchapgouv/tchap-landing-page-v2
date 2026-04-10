@@ -39,7 +39,7 @@ shortcuts_panel = ShortcutsPanel()
 class TutorialsPanel(Component):
     order = 300
     CACHE_KEY = "tutorials_panel"
-    CACHE_TIMEOUT = 60 * 60 * 24 * 7
+    CACHE_TIMEOUT = 60 * 60 * 24 * 7  # Cache for one week
 
     def get_context_data(self, parent_content=None):
         tutorials = cache.get(self.CACHE_KEY)
