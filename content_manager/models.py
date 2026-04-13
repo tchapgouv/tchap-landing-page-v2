@@ -1,5 +1,6 @@
 from typing import Union
 
+from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
@@ -661,6 +662,39 @@ class CmsDsfrConfig(ClusterableModel, BaseSiteSetting):
 
 
 class LanguageSelectorItem(Orderable):
+    def clean(self):
+        super().clean()
+
+        has_page = bool(self.page_id)
+        has_url = bool(self.external_url)
+
+        if not has_page and not has_url:
+            raise ValidationError(
+                {
+                    "page": _("You must enter a page or an external URL."),
+                }
+            )
+
+        if self.link_type == "page":
+            self.external_url = ""
+        elif self.link_type == "external_url":
+            self.page = None
+            self.page_id = None
+
+        if self.link_type == "page" and not has_page:
+            raise ValidationError(
+                {
+                    "page": _("You have selected the “Page” type but have not selected a page."),
+                }
+            )
+
+        if self.link_type == "external_url" and not has_url:
+            raise ValidationError(
+                {
+                    "external_url": _("You have selected the “External URL” type but have not entered a URL."),
+                }
+            )
+
     site_config = ParentalKey(CmsDsfrConfig, on_delete=models.CASCADE, related_name="language_selector_items")  # type: ignore
     language_code = models.CharField(
         _("Language code"),
