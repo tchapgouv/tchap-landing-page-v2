@@ -27,9 +27,11 @@ def insert_custom_editor_scripts():
         """
         <script src="{}"></script>
         <script src="{}"></script>
+        <script src="{}"></script>
         """,
         static("js/admin_editor.js"),
         static("js/open_preview_panel.js"),
+        static("js/language-selector-admin.js"),
     )
 
 
