@@ -38,11 +38,11 @@ shortcuts_panel = ShortcutsPanel()
 
 class TutorialsPanel(Component):
     order = 300
-    CACHE_KEY = "tutorials_panel"
-    CACHE_TIMEOUT = 60 * 60 * 24 * 7  # Cache for one week
+    TUTORIAL_PANEL_CACHE_KEY = "tutorials_panel"
+    TUTORIAL_PANEL_CACHE_TIMEOUT = 60 * 60 * 24 * 7  # Cache for one week
 
     def get_context_data(self, parent_content=None):
-        tutorials = cache.get(self.CACHE_KEY)
+        tutorials = cache.get(self.TUTORIAL_PANEL_CACHE_KEY)
 
         if tutorials is None:
             try:
@@ -73,7 +73,7 @@ class TutorialsPanel(Component):
             except requests.RequestException:
                 tutorials = []
 
-            cache.set(self.CACHE_KEY, tutorials, self.CACHE_TIMEOUT)
+            cache.set(self.TUTORIAL_PANEL_CACHE_KEY, tutorials, self.TUTORIAL_PANEL_CACHE_TIMEOUT)
         return {"tutorials": tutorials}
 
     template_name = "wagtailadmin/home/panels/_tutorials.html"
