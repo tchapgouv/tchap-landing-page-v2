@@ -113,6 +113,7 @@ web-prompt:
 # Commands run by the Scalingo Procfile
 [group('Production')]
 scalingo-postdeploy:
+    python manage.py migrate_from_sites_faciles --no-input
     python manage.py migrate
     python manage.py create_starter_pages
     python manage.py import_page_templates
@@ -128,7 +129,7 @@ quality:
 # Count lines of code per app
 [group('Code audit')]
 cloc:
-    @for d in "config" "blog" "content_manager" "dashboard" "events" "forms" "proconnect" "templates" ; do \
+    @for d in "config" "sites_conformes/blog" "sites_conformes/core" "sites_conformes/dashboard" "sites_conformes/events" "sites_conformes/forms" "sites_conformes/proconnect" "sites_conformes/templates" ; do \
     (cd "$d" && echo "$d" && cloc --vcs git); \
     done
 
