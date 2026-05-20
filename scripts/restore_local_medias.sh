@@ -22,4 +22,4 @@ echo "Moving media files from ${MEDIA_BACKUP_FILE} to ${MEDIA_ROOT:=medias}"
 
 cd ${BASE_PATH}
 echo `pwd`
-rm ${MEDIA_ROOT}/* -rf && tar xvzf ${MEDIA_BACKUP_FILE}
+rm ${MEDIA_ROOT}/* -rf && tar xzf ${MEDIA_BACKUP_FILE}
