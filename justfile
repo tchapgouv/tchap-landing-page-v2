@@ -126,10 +126,10 @@ scalingo-postdeploy:
 quality:
     {{docker_cmd}} {{uv_run}} pre-commit run --all-files
 
-# Count lines of code per app
+# Count lines of code per app. Requires cloc (see CONTRIBUTING.md).
 [group('Code audit')]
 cloc:
-    @for d in "config" "sites_conformes/blog" "sites_conformes/core" "sites_conformes/dashboard" "sites_conformes/events" "sites_conformes/forms" "sites_conformes/proconnect" "sites_conformes/templates" ; do \
+    @for d in "config" sites_conformes/{blog,core,dashboard,events,forms,proconnect,templates} ; do \
     (cd "$d" && echo "$d" && cloc --vcs git); \
     done
 

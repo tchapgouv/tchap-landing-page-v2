@@ -277,7 +277,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "sites-conformes", editable = "../sites_conformes" }]
+requires-dist = [{ name = "sites-conformes", editable = "../" }]
 
 [package.metadata.requires-dev]
 dev = [{ name = "django-debug-toolbar", specifier = ">=6.1.0" }]
@@ -888,7 +888,7 @@ wheels = [
 [[package]]
 name = "sites-conformes"
 version = "4.0.0rc1"
-source = { editable = "../sites_conformes" }
+source = { editable = "../" }
 dependencies = [
     { name = "beautifulsoup4" },
     { name = "boto3" },
