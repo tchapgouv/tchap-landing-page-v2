@@ -1,3 +1,4 @@
+from bs4 import BeautifulSoup
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.urls import reverse
@@ -6,7 +7,7 @@ from wagtail.models import Locale, Page, Site
 from wagtail.rich_text import RichText
 from wagtail.test.utils import WagtailPageTestCase
 
-from sites_conformes.core.models import ContentPage
+from sites_conformes.core.models import CmsDsfrConfig, ContentPage
 from sites_conformes.core.services.accessors import get_or_create_content_page
 
 User = get_user_model()
@@ -107,6 +108,22 @@ class SearchResultsTestCase(WagtailPageTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Aucun résultat")
+
+    def test_search_query_is_prefilled_in_search_bar(self):
+        site = Site.objects.get(is_default_site=True)
+        CmsDsfrConfig.objects.update_or_create(site_id=site.id, defaults={"search_bar": True})
+
+        search_url = reverse("cms_search")
+        response = self.client.get(f"{search_url}?q=carotte")
+
+        self.assertEqual(response.status_code, 200)
+        soup = BeautifulSoup(response.content.decode(), "html.parser")
+        search_bar = soup.find("div", {"id": "search-bar", "role": "search"})
+        self.assertIsNotNone(search_bar)
+
+        query_input = search_bar.find("input", {"id": "query", "name": "q", "type": "search"})
+        self.assertIsNotNone(query_input)
+        self.assertEqual(query_input.get("value"), "carotte")
 
     def test_search_page_on_other_site_is_not_found(self):
         # Create another site with its own root page
