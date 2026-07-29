@@ -305,15 +305,21 @@ class BlogIndexPagePostsTest(BlogIndexPageFilterTestBase):
             blog_categories=[self.category],
         )
         response = self.client.get(self.index.url)  # no filters
-        category_tag = f'<p class="fr-tag">{self.category.name}</p>'
         soup = BeautifulSoup(response.content, "html.parser")
-        matching_card = None
-        for card in soup.select("div.fr-card"):
-            tag_html = "".join(str(tag) for tag in card.select("p.fr-tag"))
-            if post.title in card.get_text() and category_tag in tag_html:
-                matching_card = card
-                break
-        self.assertIsNotNone(
-            matching_card,
-            "Expected a post card containing the title and the category tag.",
+
+        cards_with_title = [card for card in soup.select("div.fr-card") if post.title in card.get_text()]
+        self.assertEqual(
+            len(cards_with_title),
+            1,
+            f"Expected exactly one post card for title: {post.title!r}",
+        )
+        matching_card = cards_with_title[0]
+
+        def card_contains_category_tag(card, tag_name: str) -> bool:
+            """Look for any .fr-tag element with the expected category name."""
+            return any(tag.get_text(strip=True) == tag_name for tag in card.select(".fr-tag"))
+
+        self.assertTrue(
+            card_contains_category_tag(matching_card, self.category.name),
+            "Expected the card (matching title) to contain the category tag.",
         )
