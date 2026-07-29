@@ -405,6 +405,20 @@ WAGTAIL_RICHTEXT_FIELD_FEATURES = [
 WAGTAILEMBEDS_RESPONSIVE_HTML = True
 WAGTAIL_MODERATION_ENABLED = False
 
+# Settings for the notifications panel of the dashboard admin
+NOTIFICATIONS_FILE_URL = os.getenv(
+    "NOTIFICATIONS_FILE_URL",
+    "https://raw.githubusercontent.com/numerique-gouv/sites-conformes/refs/heads/main/notifications.json",
+)
+# GitHub API endpoint used to detect the latest published version (overridable for forks)
+LATEST_RELEASE_URL = os.getenv(
+    "LATEST_RELEASE_URL", "https://api.github.com/repos/numerique-gouv/sites-conformes/releases/latest"
+)
+# Human-facing releases page linked from the "new version available" notification (overridable for forks)
+RELEASES_URL = os.getenv("RELEASES_URL", "https://github.com/numerique-gouv/sites-conformes/releases")
+ADVERTISE_LATEST_VERSION = getenv_bool("ADVERTISE_LATEST_VERSION", True)
+
+
 # Wagtailmenus: Obsolete, to be removed in a future version (replaced by "sites_conformes.menus")
 WAGTAILMENUS_FLAT_MENUS_HANDLE_CHOICES = (
     ("header_tools", "Menu en haut à droite"),

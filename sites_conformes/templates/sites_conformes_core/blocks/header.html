@@ -63,7 +63,8 @@
                    placeholder="{{ search_label }}"
                    type="search"
                    id="query"
-                   name="q">
+                   name="q"
+                   value="{{ query|default_if_none:'' }}">
             <button class="fr-btn" title="{{ search_label }}">{{ search_label }}</button>
           </div>
         </form>
