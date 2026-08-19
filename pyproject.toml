@@ -165,3 +165,7 @@ ignore = ["E203", "E266"]
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
+
+# Blocks installation of known malware (typosquatting, deliberately malicious packages)
+[tool.uv.audit]
+malware-check = true
