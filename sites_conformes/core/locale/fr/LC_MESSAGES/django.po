@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-16 11:51+0200\n"
+"POT-Creation-Date: 2026-07-29 16:35+0200\n"
 "PO-Revision-Date: 2026-07-16 10:26+0200\n"
 "Last-Translator: Sylvain Boissel <sylvain@boissel.dev>\n"
 "Language-Team: \n"
@@ -853,6 +853,9 @@ msgstr ""
 msgid "Video ratio"
 msgstr "Ratio de la vidéo"
 
+msgid "See all posts"
+msgstr "Voir tous les articles"
+
 msgid "Blog"
 msgstr "Blog"
 
@@ -878,8 +881,26 @@ msgstr ""
 msgid "Show filters"
 msgstr "Afficher les filtres"
 
+msgid "Button text"
+msgstr "Texte du bouton"
+
+msgid "Apply filters in the \"See all posts\" page"
+msgstr "Appliquer les filtres dans la page \"Voir tous les articles\""
+
+msgid "“See all posts” button"
+msgstr "Bouton « Voir tous les articles »"
+
+msgid "See all events"
+msgstr "Voir tous les événements"
+
 msgid "Event calendar"
 msgstr "Agenda"
+
+msgid "Apply filters in the \"See all events\" page"
+msgstr "Appliquer les filtres dans la page \"Voir tous les événements\""
+
+msgid "“See all events” button"
+msgstr "Bouton « Voir tous les événements »"
 
 msgid "Section title"
 msgstr "Titre de la section"
@@ -1412,9 +1433,6 @@ msgstr "Publié le"
 msgid "No article found."
 msgstr "Aucun article trouvé."
 
-msgid "See all posts"
-msgstr "Voir tous les articles"
-
 msgid "you are here:"
 msgstr "vous êtes ici :"
 
@@ -1432,9 +1450,6 @@ msgstr "Format de fichier inconnu"
 
 msgid "Unknown file size"
 msgstr "Taille de fichier inconnue"
-
-msgid "See all events"
-msgstr "Voir tous les événements"
 
 msgid "In this section"
 msgstr "Dans cette rubrique"

@@ -214,6 +214,15 @@ def event_date_range(event_date_start, event_date_end):
     return f"{date_format(start)} – {date_format(end)}"
 
 
+@register.simple_tag
+def filters_query(filters_dict=None):
+    """Build a ``?key=val`` query string from blog index filter params."""
+    if not filters_dict:
+        return ""
+    url_string = urlencode(filters_dict, doseq=True)
+    return f"?{url_string}" if url_string else ""
+
+
 @register.filter
 def table_has_heading_row(value):
     non_empty_heading = False

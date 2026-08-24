@@ -1,11 +1,13 @@
+from bs4 import BeautifulSoup
 from django.contrib.auth import get_user_model
 from django.test import override_settings
 from django.urls import reverse
+from django.utils.translation import gettext
 from wagtail.models import Page
 from wagtail.rich_text import RichText
 from wagtail.test.utils import WagtailPageTestCase
 
-from sites_conformes.blog.models import BlogEntryPage, BlogIndexPage
+from sites_conformes.blog.models import BlogEntryPage, BlogIndexPage, Category
 from sites_conformes.core.models import ContentPage
 from sites_conformes.core.utils import import_image
 from sites_conformes.events.models import EventEntryPage, EventsIndexPage
@@ -493,68 +495,210 @@ class TileBlockTestCase(WagtailPageTestCase):
         self.assertContains(response, "fr-tile__pictogram")
 
 
-class BlogRecentEntriesBlockTestCase(WagtailPageTestCase):
+class RecentEntriesBlockTestMixin:
+    """Shared helpers and tests for blog / events recent-entries blocks.
+
+    Concrete test cases set:
+    - app_name: "blog" or "events"
+    - entry_type: "post" or "event"
+    - self.index_page (and a categorized entry under it) in setUp
+    """
+
+    app_name = ""
+    entry_type = ""
+
     def setUp(self):
-        home_page = Page.objects.get(slug="home")
-        self.admin = User.objects.create_superuser("test", "test@test.test", "pass")
-        self.admin.save()
+        super().setUp()
+        self.home_page = Page.objects.get(slug="home")
+        self.category = Category.objects.create(name="Category", slug="category")
 
-        lorem_raw = "<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>"
-        lorem_body = []
-        lorem_body.append(("paragraph", RichText(lorem_raw)))
+    def create_page_with_recent_entries_block(self, app_name, show_filters, slug_suffix="", **block_overrides):
+        stream_block_name = f"{app_name}_recent_entries"
+        content_page_slug_prefix = f"{app_name}-recent-block"
+        slug = f"{content_page_slug_prefix}-{slug_suffix}" if slug_suffix else content_page_slug_prefix
 
-        blog_index = home_page.add_child(
-            instance=BlogIndexPage(title="Actualités", body=lorem_body, slug="actualités", show_in_menus=True)
+        index_page_field = "blog" if app_name == "blog" else "index_page"
+        block_value = {
+            "title": "Actus",
+            "heading_tag": "h2",
+            "entries_count": 4,
+            "category_filter": self.category,
+            "show_filters": show_filters,
+            index_page_field: self.index_page,
+        }
+        block_value.update(block_overrides)
+
+        return self.home_page.add_child(
+            instance=ContentPage(
+                title="Sample page",
+                slug=slug,
+                body=[(stream_block_name, block_value)],
+            ),
         )
 
-        _blog_entry = blog_index.add_child(instance=BlogEntryPage(title="Article", body=lorem_body, slug="article"))
-
-        body = [
-            (
-                "blog_recent_entries",
-                {"title": "Actus", "heading_tag": "h2", "blog": blog_index, "entries_count": 4},
-            )
-        ]
-        self.content_page = home_page.add_child(
-            instance=ContentPage(title="Sample page", slug="content-page", owner=self.admin, body=body)
+    def get_recent_entries_block(self, response, app_name):
+        rendered_block_css_class = f"cmsfr-block-{app_name}-recent-entries"
+        block = BeautifulSoup(response.content, "html.parser").select_one(
+            f".{rendered_block_css_class}",
         )
-        self.content_page.save()
+        self.assertIsNotNone(block)
+        return block
 
-    def test_blog_recent_entries_is_renderable(self):
-        self.assertPageIsRenderable(self.content_page)
+    def get_see_all_button(self, block):
+        button = block.select_one("a.fr-btn")
+        self.assertIsNotNone(button)
+        return button
+
+    def assert_see_all_button_targets_index(self, button):
+        self.assertTrue(
+            button["href"].startswith(self.index_page.url),
+            f"Expected link to target {self.index_page.url!r}, got {button['href']!r}",
+        )
+
+    def test_recent_entries_block_is_renderable(self):
+        content_page = self.create_page_with_recent_entries_block(
+            app_name=self.app_name,
+            show_filters=True,
+        )
+        self.assertPageIsRenderable(content_page)
+
+    def test_filters_visible_when_enabled(self):
+        content_page = self.create_page_with_recent_entries_block(
+            app_name=self.app_name,
+            show_filters=True,
+        )
+        response = self.client.get(content_page.url)
+        block = self.get_recent_entries_block(response, self.app_name)
+
+        self.assertIn(gettext("Filter by category"), block.get_text())
+        pressed_filter = block.select_one('a.fr-tag[aria-pressed="true"]')
+        self.assertIsNotNone(pressed_filter)
+        self.assertEqual(pressed_filter.get_text(strip=True), self.category.name)
+
+    def test_filters_hidden_when_disabled(self):
+        content_page = self.create_page_with_recent_entries_block(
+            app_name=self.app_name,
+            show_filters=False,
+            slug_suffix="no-filters",
+        )
+        response = self.client.get(content_page.url)
+        block = self.get_recent_entries_block(response, self.app_name)
+
+        self.assertNotIn(gettext("Filter by category"), block.get_text())
+        self.assertIsNone(block.select_one("a.fr-tag[aria-pressed]"))
+
+    def test_see_all_link_defaults_to_unfiltered_index(self):
+        content_page = self.create_page_with_recent_entries_block(
+            app_name=self.app_name,
+            show_filters=True,
+        )
+        response = self.client.get(content_page.url)
+        button = self.get_see_all_button(
+            self.get_recent_entries_block(response, self.app_name),
+        )
+
+        self.assert_see_all_button_targets_index(button)
+        self.assertNotIn("?", button["href"])
+
+    def test_see_all_link_includes_block_filters_when_configured(self):
+        content_page = self.create_page_with_recent_entries_block(
+            app_name=self.app_name,
+            show_filters=True,
+            slug_suffix="filtered-link",
+            is_see_all_link_filtered=True,
+        )
+        response = self.client.get(content_page.url)
+        button = self.get_see_all_button(
+            self.get_recent_entries_block(response, self.app_name),
+        )
+
+        self.assert_see_all_button_targets_index(button)
+        self.assertIn(f"category={self.category.slug}", button["href"])
+
+    def test_see_all_link_omits_query_when_unfiltered(self):
+        content_page = self.create_page_with_recent_entries_block(
+            app_name=self.app_name,
+            show_filters=False,
+            slug_suffix="unfiltered",
+            category_filter=None,
+        )
+        response = self.client.get(content_page.url)
+        button = self.get_see_all_button(
+            self.get_recent_entries_block(response, self.app_name),
+        )
+
+        self.assert_see_all_button_targets_index(button)
+        self.assertNotIn("?", button["href"])
+
+    def test_see_all_button_uses_default_text(self):
+        see_all_button_default_label = f"See all {self.entry_type}s"
+
+        content_page = self.create_page_with_recent_entries_block(
+            app_name=self.app_name,
+            show_filters=True,
+        )
+        response = self.client.get(content_page.url)
+        button = self.get_see_all_button(
+            self.get_recent_entries_block(response, self.app_name),
+        )
+
+        self.assertEqual(button.get_text(strip=True), gettext(see_all_button_default_label))
+
+    def test_see_all_button_uses_custom_text(self):
+        see_all_button_custom_label = f"Browse all {self.entry_type}s"
+
+        content_page = self.create_page_with_recent_entries_block(
+            app_name=self.app_name,
+            show_filters=False,
+            slug_suffix="custom-button",
+            see_all_button_text=see_all_button_custom_label,
+        )
+        response = self.client.get(content_page.url)
+        button = self.get_see_all_button(
+            self.get_recent_entries_block(response, self.app_name),
+        )
+
+        self.assertEqual(button.get_text(strip=True), see_all_button_custom_label)
 
 
-class EventsRecentEntriesBlockTestCase(WagtailPageTestCase):
+class BlogRecentEntriesBlockTestCase(RecentEntriesBlockTestMixin, WagtailPageTestCase):
+    app_name = "blog"
+    entry_type = "post"
+
     def setUp(self):
-        home_page = Page.objects.get(slug="home")
-        self.admin = User.objects.create_superuser("test", "test@test.test", "pass")
-        self.admin.save()
+        super().setUp()
 
-        lorem_raw = "<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>"
-        lorem_body = []
-        lorem_body.append(("paragraph", RichText(lorem_raw)))
-
-        events_index = home_page.add_child(
-            instance=EventsIndexPage(title="Agenda", body=lorem_body, slug="agenda", show_in_menus=True)
+        self.index_page = self.home_page.add_child(
+            instance=BlogIndexPage(title="Actualités", slug="actualites"),
+        )
+        # Needed so the index exposes categories for the filter UI
+        self.index_page.add_child(
+            instance=BlogEntryPage(
+                title="Article",
+                slug="article",
+                blog_categories=[self.category],
+            ),
         )
 
-        _event_entry = events_index.add_child(
-            instance=EventEntryPage(title="Formation", body=lorem_body, slug="formation")
-        )
 
-        body = [
-            (
-                "events_recent_entries",
-                {"title": "Actus", "heading_tag": "h2", "index_page": events_index, "entries_count": 4},
-            )
-        ]
-        self.content_page = home_page.add_child(
-            instance=ContentPage(title="Sample page", slug="content-page", owner=self.admin, body=body)
-        )
-        self.content_page.save()
+class EventsRecentEntriesBlockTestCase(RecentEntriesBlockTestMixin, WagtailPageTestCase):
+    app_name = "events"
+    entry_type = "event"
 
-    def test_events_recent_entries_is_renderable(self):
-        self.assertPageIsRenderable(self.content_page)
+    def setUp(self):
+        super().setUp()
+
+        self.index_page = self.home_page.add_child(
+            instance=EventsIndexPage(title="Agenda", slug="agenda"),
+        )
+        # Needed so the index exposes categories for the filter UI
+        self.index_page.add_child(
+            instance=EventEntryPage(
+                title="Formation",
+                slug="formation",
+                event_categories=[self.category],
+            ),
+        )
 
 
 class HeroBackgroundImageBlockTestCase(WagtailPageTestCase):
