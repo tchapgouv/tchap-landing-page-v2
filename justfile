@@ -47,6 +47,26 @@ import_domain_whitelist:
 index:
     {{docker_cmd}} {{uv_run}} python manage.py update_index
 
+# Create .env from .env.example with a generated SECRET_KEY (never overwrites an existing .env)
+setup-env:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -f .env ]; then
+        echo ".env existe déjà, on n'écrase rien."
+        exit 0
+    fi
+    cp .env.example .env
+    python3 -c "import secrets,pathlib; c='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#%^&*(-_=+)'; k=''.join(secrets.choice(c) for _ in range(50)); p=pathlib.Path('.env'); p.write_text('\n'.join('SECRET_KEY='+k if l.startswith('SECRET_KEY=') else l for l in p.read_text().splitlines())+'\n')"
+    echo "✅ .env créé et SECRET_KEY générée."
+
+# Create the PostgreSQL user and database defined in .env (DATABASE_USER / DATABASE_PASSWORD / DATABASE_NAME)
+setup-db:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    psql -U postgres -c "CREATE USER ${DATABASE_USER} WITH CREATEDB LOGIN PASSWORD '${DATABASE_PASSWORD}';"
+    psql -U postgres -c "CREATE DATABASE ${DATABASE_NAME} OWNER ${DATABASE_USER};"
+    echo "✅ Utilisateur et base PostgreSQL créés (${DATABASE_USER} / ${DATABASE_NAME})."
+
 init:
     {{docker_cmd}} uv sync --no-group dev
     just deploy
@@ -216,3 +236,17 @@ restore-prod-db:
 [group('Dev DB and medias management')]
 restore-prod-medias:
     cd scripts && bash restore_prod_medias.sh
+
+#### Documentation-related recipes
+
+# Build the documentation and serve it locally with live reload (opens the browser)
+[group('Documentation')]
+docs:
+    uv run --no-project --with-requirements docs/requirements.txt --with sphinx-autobuild \
+        sphinx-autobuild docs docs/_build/html --open-browser
+
+# Build the documentation once (HTML written to docs/_build/html)
+[group('Documentation')]
+docs-build:
+    uv run --no-project --with-requirements docs/requirements.txt \
+        sphinx-build -b html docs docs/_build/html
