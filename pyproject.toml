@@ -16,7 +16,7 @@ readme = "README.md"
 requires-python = "<4.0,>=3.12"
 dependencies = [
     "django-dsfr>=2.4.0",
-    "django>=6.0",
+    "django==6.0",
     "wagtail>=7.2.0",
     "psycopg2-binary>=2.9.10",
     "python-dotenv>=1.1.0",
@@ -40,6 +40,7 @@ dependencies = [
     "wand>=0.6.13",
     "wagtail-honeypot>=1.2.1",
     "sentry-sdk[django]>=2.61.0",
+    "wagtail-2fa==1.8.0",
 ]
 
 [dependency-groups]
@@ -82,6 +83,7 @@ sites_conformes = [
 
 [tool.black]
 line-length = 119
+target-version = ["py312", "py313", "py314"]
 
 # force-exclude (not extend-exclude) is required so that black skips migration
 # files even when pre-commit passes them explicitly on the command line.

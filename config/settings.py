@@ -111,6 +111,9 @@ INSTALLED_APPS = [
     "wagtail_honeypot",
     "sites_conformes.dashboard",
     "wagtail.admin",
+    "wagtail_2fa",
+    "django_otp",
+    "django_otp.plugins.otp_totp",
 ]
 
 if SF_USE_DB_STORAGE:
@@ -136,6 +139,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.middleware.locale.LocaleMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "sites_conformes.dashboard.middleware.VerifyUserStaticFilesMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "sites_conformes.core.middleware.IframeMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -476,6 +480,11 @@ WAGTAIL_PASSWORD_RESET_ENABLED = getenv_bool("WAGTAIL_PASSWORD_RESET_ENABLED", F
 WAGTAILADMIN_USER_PASSWORD_RESET_FORM = "sites_conformes.dashboard.forms.DsfrPasswordResetForm"
 DSFR_MARK_OPTIONAL_FIELDS = getenv_bool("DSFR_MARK_OPTIONAL_FIELDS", True)
 
+# (Optional) 2FA settings
+# See https://wagtail-2fa.readthedocs.io/en/stable/
+WAGTAIL_2FA_REQUIRED = getenv_bool("WAGTAIL_2FA_REQUIRED", False)
+WAGTAIL_2FA_OTP_TOTP_NAME = os.getenv("WAGTAIL_2FA_OTP_TOTP_NAME", WAGTAIL_SITE_NAME)
+
 # (Optional) ProConnect settings
 PROCONNECT_ACTIVATED = getenv_bool("PROCONNECT_ACTIVATED", False)
 OIDC_CREATE_USER = getenv_bool("PROCONNECT_CREATE_USER", True)
@@ -542,7 +551,7 @@ SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
 # sites_conformes.core.middleware.IframeMiddleware.
 X_FRAME_OPTIONS = "SAMEORIGIN"
 
-
+# Sentry
 if sentry_dsn := os.getenv("SENTRY_DSN"):
     import sentry_sdk  # noqa: E402
 
@@ -551,3 +560,5 @@ if sentry_dsn := os.getenv("SENTRY_DSN"):
         send_default_pii=True,
         environment=os.getenv("SENTRY_ENVIRONMENT", "production"),
     )
+
+SENTRY_USE_DEBUG_URL = getenv_bool("SENTRY_USE_DEBUG_URL", False)
