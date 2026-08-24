@@ -1,6 +1,5 @@
 from bs4 import BeautifulSoup
 from django.contrib.auth import get_user_model
-from django.core.management import call_command
 from django.urls import reverse
 from django.utils.translation import override
 from wagtail.models import Locale, Page, Site
@@ -53,8 +52,6 @@ class SearchResultsTestCase(WagtailPageTestCase):
             )
         )
 
-        call_command("update_index")
-
     def test_search_public_content_page_is_found(self):
         search_url = reverse("cms_search")
         response = self.client.get(f"{search_url}?q=Lorem")
@@ -87,7 +84,6 @@ class SearchResultsTestCase(WagtailPageTestCase):
 
     def test_search_unpublished_content_page_is_not_found(self):
         self.public_content_page.unpublish()
-        call_command("update_index")
 
         search_url = reverse("cms_search")
         response = self.client.get(f"{search_url}?q=Lorem")
@@ -152,8 +148,6 @@ class SearchResultsTestCase(WagtailPageTestCase):
         )
         other_content_page.save_revision().publish()
 
-        call_command("update_index")
-
         search_url = reverse("cms_search")
         response = self.client.get(f"{search_url}?q=Other")
 
@@ -175,8 +169,6 @@ class SearchResultsTestCase(WagtailPageTestCase):
             english_page.slug = "public-content-page-en"
             english_page.save_revision().publish()
 
-            call_command("update_index")
-
             search_url = reverse("cms_search")
             response = self.client.get(f"{search_url}?q=English")
 
@@ -195,8 +187,6 @@ class SearchResultsTestCase(WagtailPageTestCase):
             )
         )
         catalog_page.save_revision().publish()
-
-        call_command("update_index")
 
         search_url = reverse("cms_search")
         response = self.client.get(f"{search_url}?q=Catalog")

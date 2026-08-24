@@ -63,45 +63,51 @@ class BlogIndexPageFilterTestBase(WagtailPageTestCase):
     entry_page_factory = BlogEntryPageFactory
     filter_cases = FILTER_CASES
 
+    @classmethod
+    def setUpTestData(cls):
+        cls.home = Page.objects.get(slug="home")
+        cls.admin = User.objects.create_superuser("test", "test@test.test", "pass")
+        cls.index = cls.index_page_factory(parent=cls.home, owner=cls.admin)
+        cls.setup_filter_fixtures()
+        cls.setup_taxonomy_filter_fixtures()
+
     def setUp(self):
-        self.home = Page.objects.get(slug="home")
-        self.admin = User.objects.create_superuser("test", "test@test.test", "pass")
-        self.admin.save()
+        super().setUp()
+        # Tests such as ``_set_filter_settings`` mutate ``self.index`` in memory;
+        # Django rolls back the DB per method but not the Python object.
+        self.index.refresh_from_db()
 
-        self.index = self.index_page_factory(parent=self.home, owner=self.admin)
+    @classmethod
+    def setup_filter_fixtures(cls):
+        cls.tag = TagFactory()
+        cls.other_tag = TagFactory()
+        cls.organization = OrganizationFactory()
+        cls.other_organization = OrganizationFactory()
+        cls.author = PersonFactory(organization=cls.organization)
+        cls.other_author = PersonFactory(organization=cls.other_organization)
 
-        self.setup_filter_fixtures()
-        self.setup_taxonomy_filter_fixtures()
-
-    def setup_filter_fixtures(self):
-        self.tag = TagFactory()
-        self.other_tag = TagFactory()
-        self.organization = OrganizationFactory()
-        self.other_organization = OrganizationFactory()
-        self.author = PersonFactory(organization=self.organization)
-        self.other_author = PersonFactory(organization=self.other_organization)
-
-        self.post_with_tag = self.entry_page_factory(parent=self.index, owner=self.admin, tags=[self.tag])
-        self.post_with_other_tag = self.entry_page_factory(parent=self.index, owner=self.admin, tags=[self.other_tag])
-        self.post_with_author = self.entry_page_factory(parent=self.index, owner=self.admin, authors=[self.author])
-        self.post_with_other_author = self.entry_page_factory(
-            parent=self.index, owner=self.admin, authors=[self.other_author]
+        cls.post_with_tag = cls.entry_page_factory(parent=cls.index, owner=cls.admin, tags=[cls.tag])
+        cls.post_with_other_tag = cls.entry_page_factory(parent=cls.index, owner=cls.admin, tags=[cls.other_tag])
+        cls.post_with_author = cls.entry_page_factory(parent=cls.index, owner=cls.admin, authors=[cls.author])
+        cls.post_with_other_author = cls.entry_page_factory(
+            parent=cls.index, owner=cls.admin, authors=[cls.other_author]
         )
 
-    def setup_taxonomy_filter_fixtures(self):
-        locale = self.index.locale
-        self.category = CategoryFactory(locale=locale)
-        self.other_category = CategoryFactory(locale=locale)
+    @classmethod
+    def setup_taxonomy_filter_fixtures(cls):
+        locale = cls.index.locale
+        cls.category = CategoryFactory(locale=locale)
+        cls.other_category = CategoryFactory(locale=locale)
 
-        self.post_with_category = self.entry_page_factory(
-            parent=self.index,
-            owner=self.admin,
-            blog_categories=[self.category],
+        cls.post_with_category = cls.entry_page_factory(
+            parent=cls.index,
+            owner=cls.admin,
+            blog_categories=[cls.category],
         )
-        self.post_with_other_category = self.entry_page_factory(
-            parent=self.index,
-            owner=self.admin,
-            blog_categories=[self.other_category],
+        cls.post_with_other_category = cls.entry_page_factory(
+            parent=cls.index,
+            owner=cls.admin,
+            blog_categories=[cls.other_category],
         )
 
     def _set_filter_settings(self, **settings):
