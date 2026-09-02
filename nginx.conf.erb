@@ -1,0 +1,73 @@
+<%
+require "ipaddr"
+require "json"
+require "net/http"
+
+fallback_imperva_ip_ranges = %w[
+  199.83.128.0/21
+  198.143.32.0/19
+  149.126.72.0/21
+  103.28.248.0/22
+  185.11.124.0/22
+  192.230.64.0/18
+  45.64.64.0/22
+  107.154.0.0/16
+  45.60.0.0/16
+  45.223.0.0/16
+  131.125.128.0/17
+  2a02:e980::/29
+]
+
+validate_imperva_ip_ranges = lambda do |ip_ranges|
+  raise "Imperva IP ranges API returned an empty allowlist" if ip_ranges.empty?
+
+  ip_ranges.each do |ip_range|
+    raise "Imperva IP ranges API returned a non-string range" unless ip_range.is_a?(String)
+
+    IPAddr.new(ip_range)
+  end
+
+  ip_ranges
+end
+
+begin
+  imperva_ip_ranges_uri = URI("https://my.imperva.com/api/integration/v1/ips")
+  imperva_ip_ranges_response = Net::HTTP.start(
+    imperva_ip_ranges_uri.host,
+    imperva_ip_ranges_uri.port,
+    use_ssl: true,
+    open_timeout: 5,
+    read_timeout: 10,
+  ) do |http|
+    http.request(Net::HTTP::Get.new(imperva_ip_ranges_uri))
+  end
+
+  unless imperva_ip_ranges_response.is_a?(Net::HTTPSuccess)
+    raise "Unable to fetch Imperva IP ranges (HTTP #{imperva_ip_ranges_response.code})"
+  end
+
+  imperva_ip_ranges_payload = JSON.parse(imperva_ip_ranges_response.body)
+  unless imperva_ip_ranges_payload.fetch("res") == 0
+    raise "Imperva IP ranges API returned an error"
+  end
+
+  imperva_ip_ranges = %w[ipRanges ipv6Ranges].flat_map do |key|
+    imperva_ip_ranges_payload.fetch(key)
+  end
+  imperva_ip_ranges = validate_imperva_ip_ranges.call(imperva_ip_ranges)
+rescue StandardError => error
+  warn "Unable to use the Imperva IP ranges API (#{error.message}); using the bundled fallback allowlist"
+  imperva_ip_ranges = validate_imperva_ip_ranges.call(fallback_imperva_ip_ranges)
+end
+%>
+location / {
+    # Scalingo overwrites X-Forwarded-For with the peer address and its nginx
+    # buildpack maps that header to $remote_addr.
+<% imperva_ip_ranges.each do |ip_range| %>
+    allow <%= ip_range %>;
+<% end %>
+    deny all;
+
+    proxy_set_header Host $host;
+    proxy_pass http://127.0.0.1:<%= ENV.fetch("APP_PORT", "8000") %>;
+}
