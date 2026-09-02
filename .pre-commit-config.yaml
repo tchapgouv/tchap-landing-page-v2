@@ -2,16 +2,28 @@
 # See https://pre-commit.com/hooks.html for more hooks
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.4
+    rev: v0.16.5
     hooks:
       - id: ruff-check
         args: [ --fix, --exit-non-zero-on-fix ]
   - repo: https://github.com/psf/black
-    rev: 25.11.0
+    rev: 26.5.1
     hooks:
     - id: black
+      language_version: python3.14
   - repo: https://github.com/astral-sh/uv-pre-commit
     # uv version.
-    rev: 0.9.9
+    rev: 0.12.7
     hooks:
       - id: uv-lock
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: "v0.49.1"
+    hooks:
+      - id: markdownlint
+        args: ["-f"]
+        exclude: ^sites_conformes/static/
+  - repo: https://github.com/PyCQA/bandit
+    rev: '1.9.4'
+    hooks:
+    - id: bandit
+      exclude: '(^|/)(tests|migrations)/|^demo/'

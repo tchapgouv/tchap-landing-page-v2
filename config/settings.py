@@ -58,6 +58,12 @@ FORCE_SCRIPT_NAME = os.getenv("FORCE_SCRIPT_NAME", "").rstrip("/")
 # Allow enabling WhiteNoise via an environment variable (disabled by default)
 SF_USE_WHITENOISE = getenv_bool("SF_USE_WHITENOISE", False)
 
+# Allow storing media files in PostgreSQL instead of the filesystem (disabled by default)
+# Useful for PaaS deployments with ephemeral filesystems (Scalingo, Heroku, etc.)
+# /!\ Not recommended beyond 1 GB of media — prefer S3 for larger volumes.
+# Selection order: S3_HOST wins if set, then SF_USE_DB_STORAGE, then filesystem (default)
+SF_USE_DB_STORAGE = getenv_bool("SF_USE_DB_STORAGE", False)
+
 INTERNAL_IPS = [
     "127.0.0.1",
 ]
@@ -81,7 +87,7 @@ INSTALLED_APPS = [
     "wagtail.snippets",
     "wagtail",
     "wagtailmarkdown",
-    "wagtailmenus",
+    "wagtailmenus",  # Obsolete, to be removed in a future version (replaced by "sites_conformes.menus")
     "wagtail_localize",
     "wagtail_localize.locales",
     "taggit",
@@ -90,20 +96,28 @@ INSTALLED_APPS = [
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.humanize",
-    "django.contrib.sessions",
     "django.contrib.messages",
+    "django.contrib.postgres",
+    "django.contrib.sessions",
     "django.contrib.sitemaps",
     "django.contrib.staticfiles",
     "widget_tweaks",
     "dsfr",
-    "content_manager",
-    "blog",
-    "events",
-    "forms",
+    "sites_conformes.core",
+    "sites_conformes.blog",
+    "sites_conformes.events",
+    "sites_conformes.forms",
+    "sites_conformes.menus",
     "wagtail_honeypot",
-    "dashboard",
+    "sites_conformes.dashboard",
     "wagtail.admin",
+    "wagtail_2fa",
+    "django_otp",
+    "django_otp.plugins.otp_totp",
 ]
+
+if SF_USE_DB_STORAGE:
+    INSTALLED_APPS.insert(-1, "sites_conformes.db_storage")
 
 if SF_USE_WHITENOISE:
     INSTALLED_APPS.insert(0, "whitenoise.runserver_nostatic")
@@ -125,7 +139,9 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.middleware.locale.LocaleMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "sites_conformes.dashboard.middleware.VerifyUserStaticFilesMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
+    "sites_conformes.core.middleware.IframeMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "wagtail.contrib.redirects.middleware.RedirectMiddleware",
 ]
@@ -163,7 +179,7 @@ TEMPLATES = [
         "BACKEND": "django.template.backends.django.DjangoTemplates",
         "DIRS": [
             os.path.join(BASE_DIR, "dsfr/templates"),
-            os.path.join(BASE_DIR, "templates"),
+            os.path.join(BASE_DIR, "sites_conformes/templates"),
         ],
         "APP_DIRS": True,
         "OPTIONS": {
@@ -174,8 +190,9 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 "wagtail.contrib.settings.context_processors.settings",
                 "wagtailmenus.context_processors.wagtailmenus",
-                "content_manager.context_processors.skiplinks",
-                "content_manager.context_processors.mega_menus",
+                "sites_conformes.core.context_processors.skiplinks",
+                "sites_conformes.core.context_processors.mega_menus",
+                "sites_conformes.core.context_processors.iframe",
             ],
         },
     },
@@ -238,7 +255,7 @@ WAGTAIL_CONTENT_LANGUAGES = LANGUAGES = [
     ("fr", "Français"),
 ]
 
-LOCALE_PATHS = ["locale"]
+LOCALE_PATHS = [os.path.join(BASE_DIR, "sites_conformes/locale")]
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
@@ -270,22 +287,47 @@ STATICFILES_FINDERS = [
 # https://django-storages.readthedocs.io/en/latest/backends/amazon-S3.html
 
 if os.getenv("S3_HOST"):
-    endpoint_url = f"{os.getenv('S3_PROTOCOL', 'https')}://{os.getenv('S3_HOST')}"
+    protocol = os.getenv("S3_PROTOCOL", "https")
+    endpoint_url = f"{protocol}://{os.getenv('S3_HOST')}"
+    bucket_name = os.getenv("S3_BUCKET_NAME", "set-bucket-name")
+    public_host = os.getenv("S3_PUBLIC_HOST", "")
+
+    options = {
+        "bucket_name": bucket_name,
+        "access_key": os.getenv("S3_KEY_ID", "123"),
+        "secret_key": os.getenv("S3_KEY_SECRET", "secret"),
+        "endpoint_url": endpoint_url,
+        "region_name": os.getenv("S3_BUCKET_REGION", "fr"),
+        "file_overwrite": False,
+        "location": os.getenv("S3_LOCATION", ""),
+    }
+
+    if public_host:
+        # Presigned URLs bind the signature to the endpoint hostname, so when the
+        # internal endpoint differs from the public one, signing must be disabled.
+        # The bucket is appended to custom_domain to produce path-style URLs for MinIO.
+        options["custom_domain"] = f"{public_host}/{bucket_name}"
+        options["url_protocol"] = f"{protocol}:"
+        options["querystring_auth"] = False
+        public_endpoint = f"{protocol}://{public_host}"
+    else:
+        public_endpoint = endpoint_url
 
     STORAGES["default"] = {
         "BACKEND": "storages.backends.s3.S3Storage",
-        "OPTIONS": {
-            "bucket_name": os.getenv("S3_BUCKET_NAME", "set-bucket-name"),
-            "access_key": os.getenv("S3_KEY_ID", "123"),
-            "secret_key": os.getenv("S3_KEY_SECRET", "secret"),
-            "endpoint_url": endpoint_url,
-            "region_name": os.getenv("S3_BUCKET_REGION", "fr"),
-            "file_overwrite": False,
-            "location": os.getenv("S3_LOCATION", ""),
-        },
+        "OPTIONS": options,
     }
 
-    MEDIA_URL = f"{endpoint_url}/"
+    MEDIA_URL = f"{public_endpoint}/"
+elif SF_USE_DB_STORAGE:
+    STORAGES["default"] = {
+        "BACKEND": "sites_conformes.db_storage.storage.DatabaseStorage",
+    }
+    MEDIA_URL = os.getenv("MEDIA_URL", "db-storage/")
+    MEDIA_ROOT = os.path.join(BASE_DIR, os.getenv("MEDIA_ROOT", ""))
+
+    if FORCE_SCRIPT_NAME and not MEDIA_URL.startswith(FORCE_SCRIPT_NAME):
+        MEDIA_URL = f"{FORCE_SCRIPT_NAME}/{MEDIA_URL}"
 else:
     STORAGES["default"] = {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
@@ -305,7 +347,7 @@ if FORCE_SCRIPT_NAME and not STATIC_URL.startswith(FORCE_SCRIPT_NAME):
 
 
 # Allow Django to serve statics even in production if needed
-SF_PROD_SERVE_STATIC = True if os.getenv("SF_PROD_SERVE_STATIC", False) in ["1", "True"] else False
+SF_PROD_SERVE_STATIC = getenv_bool("SF_PROD_SERVE_STATIC", False)
 if SF_PROD_SERVE_STATIC:
     import mimetypes
 
@@ -314,7 +356,7 @@ if SF_PROD_SERVE_STATIC:
 
     WHITENOISE_STATIC_PREFIX = STATIC_URL
 
-STATICFILES_DIRS = (os.path.join(BASE_DIR, "static"),)
+STATICFILES_DIRS = (os.path.join(BASE_DIR, "sites_conformes/static"),)
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -324,7 +366,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 # Wagtail settings
 # https://docs.wagtail.org/en/stable/reference/settings.html
 
-WAGTAIL_SITE_NAME = os.getenv("SITE_NAME", "Sites faciles")
+WAGTAIL_SITE_NAME = os.getenv("SITE_NAME", "Sites Conformes")
 
 # Base URL to use when referring to full URLs within the Wagtail admin backend -
 # e.g. in notification emails. Don't include '/admin' or a trailing slash
@@ -346,7 +388,7 @@ LOGOUT_URL = f"{FORCE_SCRIPT_NAME}/{WAGTAILADMIN_PATH}logout/"
 
 WAGTAIL_FRONTEND_LOGIN_URL = LOGIN_URL
 
-WAGTAIL_PASSWORD_REQUIRED_TEMPLATE = "content_manager/password_required.html"
+WAGTAIL_PASSWORD_REQUIRED_TEMPLATE = "sites_conformes_core/password_required.html"  # nosec B105
 
 # Disable Gravatar service
 WAGTAIL_GRAVATAR_PROVIDER_URL = None
@@ -368,6 +410,22 @@ WAGTAIL_RICHTEXT_FIELD_FEATURES = [
 
 WAGTAILEMBEDS_RESPONSIVE_HTML = True
 WAGTAIL_MODERATION_ENABLED = False
+
+# Settings for the notifications panel of the dashboard admin
+NOTIFICATIONS_FILE_URL = os.getenv(
+    "NOTIFICATIONS_FILE_URL",
+    "https://raw.githubusercontent.com/numerique-gouv/sites-conformes/refs/heads/main/notifications.json",
+)
+# GitHub API endpoint used to detect the latest published version (overridable for forks)
+LATEST_RELEASE_URL = os.getenv(
+    "LATEST_RELEASE_URL", "https://api.github.com/repos/numerique-gouv/sites-conformes/releases/latest"
+)
+# Human-facing releases page linked from the "new version available" notification (overridable for forks)
+RELEASES_URL = os.getenv("RELEASES_URL", "https://github.com/numerique-gouv/sites-conformes/releases")
+ADVERTISE_LATEST_VERSION = getenv_bool("ADVERTISE_LATEST_VERSION", True)
+
+
+# Wagtailmenus: Obsolete, to be removed in a future version (replaced by "sites_conformes.menus")
 WAGTAILMENUS_FLAT_MENUS_HANDLE_CHOICES = (
     ("header_tools", "Menu en haut à droite"),
     ("footer", "Menu en pied de page"),
@@ -388,12 +446,19 @@ WAGTAILMENUS_FLAT_MENUS_HANDLE_CHOICES = (
     ("mega_menu_section_15", "Catégorie de méga-menu 15"),
     ("mega_menu_section_16", "Catégorie de méga-menu 16"),
 )
+WAGTAILMENUS_FLAT_MENUS_EDITABLE_IN_WAGTAILADMIN = False
+WAGTAILMENUS_MAIN_MENUS_EDITABLE_IN_WAGTAILADMIN = False
+
+WAGTAILDOCS_MAX_UPLOAD_SIZE = int(os.getenv("WAGTAILDOCS_MAX_UPLOAD_SIZE", 10 * 1024 * 1024))  # 10MB
 
 WAGTAILIMAGES_EXTENSIONS = ["gif", "jpg", "jpeg", "png", "webp", "svg"]
-SF_SCHEME_DEPENDENT_SVGS = True if os.getenv("SF_SCHEME_DEPENDENT_SVGS", False) in ["1", "True"] else False
+WAGTAILDOCS_EXTENSIONS = ["pdf", "docx", "odt", "xlsx", "ods", "pptx", "odp", "csv", "txt"]
+SF_SCHEME_DEPENDENT_SVGS = getenv_bool("SF_SCHEME_DEPENDENT_SVGS", False)
 
 # Allows for complex Streamfields without completely removing checks
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000
+DATA_UPLOAD_MAX_MEMORY_SIZE = int(os.getenv("DATA_UPLOAD_MAX_MEMORY_SIZE", 10 * 1024 * 1024))  # 10MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = int(os.getenv("FILE_UPLOAD_MAX_MEMORY_SIZE", 2.5 * 1024 * 1024))  # 2.5MB
 
 # Email settings
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "")
@@ -410,11 +475,19 @@ if DEFAULT_FROM_EMAIL:
     EMAIL_SSL_KEYFILE = os.getenv("EMAIL_SSL_KEYFILE", None)
     EMAIL_SSL_CERTFILE = os.getenv("EMAIL_SSL_CERTFILE", None)
 
-WAGTAIL_PASSWORD_RESET_ENABLED = os.getenv("WAGTAIL_PASSWORD_RESET_ENABLED", False)
+# Forms
+WAGTAIL_PASSWORD_RESET_ENABLED = getenv_bool("WAGTAIL_PASSWORD_RESET_ENABLED", False)
+WAGTAILADMIN_USER_PASSWORD_RESET_FORM = "sites_conformes.dashboard.forms.DsfrPasswordResetForm"  # nosec B105
+DSFR_MARK_OPTIONAL_FIELDS = getenv_bool("DSFR_MARK_OPTIONAL_FIELDS", True)
+
+# (Optional) 2FA settings
+# See https://wagtail-2fa.readthedocs.io/en/stable/
+WAGTAIL_2FA_REQUIRED = getenv_bool("WAGTAIL_2FA_REQUIRED", False)
+WAGTAIL_2FA_OTP_TOTP_NAME = os.getenv("WAGTAIL_2FA_OTP_TOTP_NAME", WAGTAIL_SITE_NAME)
 
 # (Optional) ProConnect settings
-PROCONNECT_ACTIVATED = True if os.getenv("PROCONNECT_ACTIVATED", False) in ["1", "True"] else False
-OIDC_CREATE_USER = True if os.getenv("PROCONNECT_CREATE_USER", "True") in ["1", "True"] else False
+PROCONNECT_ACTIVATED = getenv_bool("PROCONNECT_ACTIVATED", False)
+OIDC_CREATE_USER = getenv_bool("PROCONNECT_CREATE_USER", True)
 OIDC_RP_CLIENT_ID = os.getenv("PROCONNECT_CLIENT_ID", "")
 OIDC_RP_CLIENT_SECRET = os.getenv("PROCONNECT_CLIENT_SECRET", "")
 OIDC_RP_SCOPES = os.getenv("PROCONNECT_SCOPES", "openid given_name usual_name email siret uid")
@@ -432,7 +505,7 @@ OIDC_AUTH_REQUEST_EXTRA_PARAMS = {"acr_values": "eidas1"}
 OIDC_REDIRECT_ALLOWED_HOSTS = ALLOWED_HOSTS
 PROCONNECT_USER_CREATION_FILTER = os.getenv("PROCONNECT_USER_CREATION_FILTER", None)
 LASUITE_DOMAINE_API_KEY = os.getenv("LASUITE_DOMAINE_API_KEY", None)
-SF_DISABLE_LOCAL_LOGIN = True if os.getenv("SF_DISABLE_LOCAL_LOGIN") in ["1", "True"] else False
+SF_DISABLE_LOCAL_LOGIN = getenv_bool("SF_DISABLE_LOCAL_LOGIN", False)
 
 LOGIN_REDIRECT_URL = f"{FORCE_SCRIPT_NAME}/"
 LOGOUT_REDIRECT_URL = f"{FORCE_SCRIPT_NAME}/"
@@ -440,12 +513,12 @@ LOGOUT_REDIRECT_URL = f"{FORCE_SCRIPT_NAME}/"
 if PROCONNECT_ACTIVATED:
     INSTALLED_APPS += [
         "mozilla_django_oidc",
-        "proconnect",
+        "sites_conformes.proconnect",
     ]
 
     AUTHENTICATION_BACKENDS = [
         "django.contrib.auth.backends.ModelBackend",
-        "proconnect.backends.OIDCAuthenticationBackend",
+        "sites_conformes.proconnect.backends.OIDCAuthenticationBackend",
     ]
 
     LOGOUT_URL = f"{FORCE_SCRIPT_NAME}/oidc/logout/"
@@ -467,7 +540,25 @@ if len(trusted_origins):
 
 # Disable the integrity checksums by default.
 # They can clash with Whitenoise and are normally not useful as we serve the statics from a trusted source
-DSFR_USE_INTEGRITY_CHECKSUMS = True if os.getenv("DSFR_USE_INTEGRITY_CHECKSUMS") in ["1", "True"] else False
+DSFR_USE_INTEGRITY_CHECKSUMS = getenv_bool("DSFR_USE_INTEGRITY_CHECKSUMS", False)
 
-SF_DISABLE_TUTORIALS = True if os.getenv("SF_DISABLE_TUTORIALS") in ["1", "True"] else False
+SF_DISABLE_TUTORIALS = getenv_bool("SF_DISABLE_TUTORIALS", False)
 SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+
+# Legacy clickjacking fallback for browsers without CSP frame-ancestors
+# support. Browsers that support frame-ancestors ignore X-Frame-Options,
+# so this does not conflict with the per-site policy emitted by
+# sites_conformes.core.middleware.IframeMiddleware.
+X_FRAME_OPTIONS = "SAMEORIGIN"
+
+# Sentry
+if sentry_dsn := os.getenv("SENTRY_DSN"):
+    import sentry_sdk  # noqa: E402
+
+    sentry_sdk.init(
+        dsn=sentry_dsn,
+        send_default_pii=True,
+        environment=os.getenv("SENTRY_ENVIRONMENT", "production"),
+    )
+
+SENTRY_USE_DEBUG_URL = getenv_bool("SENTRY_USE_DEBUG_URL", False)

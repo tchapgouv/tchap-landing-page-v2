@@ -1,24 +1,26 @@
 [project]
-name = "sites-faciles"
-version = "2.4.0"
+name = "sites-conformes"
+# Version is driven by the GitHub Release tag at publish time. See
+# .github/workflows/publish.yml, which writes sites_conformes/_version.py
+# from github.event.release.tag_name (stripped of a leading "v").
+# The committed _version.py value is the local/dev fallback.
+dynamic = ["version"]
 description = "Gestionnaire de contenu permettant de créer et gérer un site internet basé sur le Système de design de l’État, accessible et responsive"
 authors = [
-    { name = "Sébastien Reuiller", email = "sebastien.reuiller@beta.gouv.fr" },
-    { name = "Sylvain Boissel", email = "sylvain.boissel@beta.gouv.fr" },
-    { name = "Lucien Mollard", email = "lucien.mollard@beta.gouv.fr" },
-    { name = "Lucie Laporte", email = "lucie.laporte@beta.gouv.fr" },
+    { name = "Sites Conformes dev team", email = "contact@sites.beta.gouv.fr" }
 ]
 maintainers = [
-    { name = "Sylvain Boissel", email = "sylvain.boissel@beta.gouv.fr" },
-    { name = "Lucien Mollard", email = "lucien.mollard@beta.gouv.fr" },
-    { name = "Lucie Laporte", email = "lucie.laporte@beta.gouv.fr" },
+    { name = "Sites Conformes dev team", email = "contact@sites.beta.gouv.fr" }
 ]
 readme = "README.md"
-requires-python = "<4.0,>=3.11"
+requires-python = "<4.0,>=3.12"
 dependencies = [
     "django-dsfr>=2.4.0",
-    "django>=5.2.8",
-    "wagtail>=7.2.0",
+    "django<6.1,>=6.0",
+    # Upper bound: wagtail-2fa 1.8.0 still imports the deprecated
+    # wagtail.users.widgets.UserListingButton, which Wagtail 8 removed.
+    # Lift once wagtail-2fa adds Wagtail 8 support (see labd/wagtail-2fa#280).
+    "wagtail>=7.2.0,<8.0.0",
     "psycopg2-binary>=2.9.10",
     "python-dotenv>=1.1.0",
     "dj-database-url>=3.0.0",
@@ -26,7 +28,6 @@ dependencies = [
     "dj-static>=0.0.6",
     "whitenoise<7.0,>=6.6",
     "wagtailmenus>=4.0.3",
-    "wagtail-modeladmin>=2.2.0",
     "wagtail-markdown>=0.12.1",
     "unidecode>=1.4.0",
     "django-storages[s3]>=1.14.6",
@@ -38,27 +39,66 @@ dependencies = [
     "faker>=37.4.0",
     "rust-just>=1.40.0",
     "mozilla-django-oidc>=4.0.1",
-    "wagtail-honeypot @ git+https://github.com/Luzzzi/wagtail-honeypot@feature/i18n-required-honeypot",
     "wand>=0.6.13",
+    "wagtail-honeypot>=1.2.1",
+    "sentry-sdk[django]>=2.61.0",
+    "wagtail-2fa==1.8.0",
+    "packaging>=26.3",
+    "requests>=2.34.2",
+    "django-otp>=1.7.0",
+    "django-modelcluster>=6.5",
+    "djangorestframework>=3.18.0",
 ]
 
 [dependency-groups]
 dev = [
+    "bandit>=1.9.4",
     "black>=25.1.0",
     "coverage>=7.9.1",
+    "deptry>=0.25.1",
     "django-compressor>=4.5.1",
     "django-debug-toolbar>=5.2.0",
     "djlint>=1.36.4",
+    "factory-boy>=3.3.3",
     "ipython>=9.3.0",
     "pre-commit>=4.2.0",
     "ruff>=0.12.0",
     "tblib>=3.1.0",
+    "wagtail-factories>=4.5.0",
+]
+
+# Packaging-only — upstream sites-conformes is a Django project and ships
+# no [build-system]. We package it as `sites-conformes` for PyPI.
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.dynamic]
+version = { attr = "sites_conformes._version.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["sites_conformes*"]
+
+[tool.setuptools.package-data]
+sites_conformes = [
+    "templates/**/*",
+    "static/**/*",
+    "*/templates/**/*",
+    "*/static/**/*",
+    "*/page_templates/**/*",
+    "*/locale/*/LC_MESSAGES/*.po",
+    "*/locale/*/LC_MESSAGES/*.mo",
 ]
 
 [tool.black]
 line-length = 119
+target-version = ["py312", "py313", "py314"]
 
-extend-exclude = '''
+# force-exclude (not extend-exclude) is required so that black skips migration
+# files even when pre-commit passes them explicitly on the command line.
+# `extend-exclude` only applies to recursive directory walks.
+force-exclude = '''
 /(
   | migrations
 )/
@@ -122,6 +162,11 @@ exclude = [
     "migrations",
 ]
 
+# force-exclude makes ruff honor the exclude list even when paths are passed
+# explicitly (which is what pre-commit does). Without this, ruff lints
+# migration files regardless of the exclude rule above.
+force-exclude = true
+
 line-length = 119
 
 [tool.ruff.lint]
@@ -132,3 +177,40 @@ ignore = ["E203", "E266"]
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
+
+[tool.deptry]
+# demo/ is a separate project with its own pyproject.toml/dependencies.
+# Migrations only re-import what the corresponding models.py already imports.
+# Per-app tests/ directories aren't matched by deptry's default "tests" exclude
+# (which only matches a top-level tests/ dir), so dev-only imports there (e.g.
+# wagtail_factories) would otherwise be flagged as misplaced (DEP004).
+extend_exclude = ["^demo/", ".*/migrations/", ".*/tests/"]
+
+[tool.deptry.package_module_name_map]
+# Packages whose distributed module name doesn't match deptry's default guess
+# (package name with hyphens replaced by underscores).
+"django-dsfr" = "dsfr"
+"python-dotenv" = "dotenv"
+"wagtail-markdown" = "wagtailmarkdown"
+"django-taggit" = "taggit"
+"beautifulsoup4" = "bs4"
+
+[tool.deptry.per_rule_ignores]
+# Not imported directly in Python: loaded by Django via a string reference
+# (INSTALLED_APPS/MIDDLEWARE/STORAGES) or invoked as an external process.
+DEP002 = [
+    "gunicorn",         # WSGI server, run as a subprocess (Procfile), never imported
+    "whitenoise",       # referenced by string in MIDDLEWARE/STORAGES/INSTALLED_APPS
+    "django-storages",  # referenced by string as "storages" in the STORAGES setting
+    "psycopg2-binary",  # DB driver loaded by Django from DATABASE_URL, not imported directly
+    "rust-just",        # installs the `just` CLI binary, no Python import
+    "wand",             # ImageMagick backend auto-detected by Wagtail's Willow for animated GIFs (#390), never imported directly
+    "wagtailmenus",     # obsolete app kept for its models/migrations (see config/settings.py), referenced only by string
+]
+
+# Blocks installation of known malware (typosquatting, deliberately malicious packages)
+[tool.uv.audit]
+malware-check = true
+
+[tool.bandit]
+exclude_dirs = ["tests", "migrations", "demo"]
