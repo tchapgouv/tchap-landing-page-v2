@@ -71,7 +71,8 @@ server {
         allow <%= ip_range %>;
 <% end %>
         deny all;
-
+        add_header X-Debug-Remote-Addr $remote_addr always;
+        add_header X-Debug-XFF $http_x_forwarded_for always;
         proxy_set_header Host $host;
         proxy_pass http://127.0.0.1:<%= ENV.fetch("APP_PORT", "8000") %>;
     }
