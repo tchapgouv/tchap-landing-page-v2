@@ -60,20 +60,14 @@ rescue StandardError => error
   imperva_ip_ranges = validate_imperva_ip_ranges.call(fallback_imperva_ip_ranges)
 end
 %>
-server {
-    server_name localhost;
-    listen <%= ENV.fetch("PORT") %>;
-
-    location / {
-        # Scalingo overwrites X-Forwarded-For with the peer address and its
-        # nginx buildpack maps that header to $remote_addr.
+location / {
+    # Scalingo overwrites X-Forwarded-For with the peer address and its nginx
+    # buildpack maps that header to $remote_addr.
 <% imperva_ip_ranges.each do |ip_range| %>
-        allow <%= ip_range %>;
+    allow <%= ip_range %>;
 <% end %>
-        deny all;
-        add_header X-Debug-Remote-Addr $remote_addr always;
-        add_header X-Debug-XFF $http_x_forwarded_for always;
-        proxy_set_header Host $host;
-        proxy_pass http://127.0.0.1:<%= ENV.fetch("APP_PORT", "8000") %>;
-    }
+    deny all;
+
+    proxy_set_header Host $host;
+    proxy_pass http://127.0.0.1:<%= ENV.fetch("APP_PORT", "8000") %>;
 }
