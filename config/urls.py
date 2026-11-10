@@ -3,10 +3,10 @@ from functools import partial
 from django.conf import settings
 from django.conf.urls.i18n import i18n_patterns
 from django.conf.urls.static import static
-from django.urls import include, path
-from django.views.defaults import page_not_found, server_error
+from django.middleware.csrf import REASON_NO_CSRF_COOKIE
+from django.urls import get_callable, include, path
+from django.views.defaults import page_not_found, permission_denied, server_error
 from django.views.generic.base import RedirectView, TemplateView
-from django.views.i18n import JavaScriptCatalog
 from wagtail.admin import urls as wagtailadmin_urls
 from wagtail.contrib.sitemaps.views import sitemap
 from wagtail.documents import urls as wagtaildocs_urls
@@ -15,6 +15,7 @@ from config.api import api_router
 from sites_conformes.dashboard.views import PasswordResetConfirmView
 from sites_conformes.proconnect import urls as oidc_urls
 
+TEMPLATE_403 = "sites_conformes_core/403.html"
 TEMPLATE_404 = "sites_conformes_core/404.html"
 TEMPLATE_500 = "sites_conformes_core/500.html"
 
@@ -52,7 +53,17 @@ if settings.PROCONNECT_ACTIVATED:
     ]
 
 if settings.DEBUG or settings.TESTING:
+
+    def simulate_csrf_failure(request):
+        return get_callable(settings.CSRF_FAILURE_VIEW)(request, reason=REASON_NO_CSRF_COOKIE)
+
     urlpatterns += i18n_patterns(
+        path(
+            "403/",
+            permission_denied,
+            kwargs={"exception": Exception("Access denied"), "template_name": TEMPLATE_403},
+        ),
+        path("403-csrf/", simulate_csrf_failure),
         path(
             "404/",
             page_not_found,
@@ -72,10 +83,10 @@ if settings.SENTRY_USE_DEBUG_URL:
     ]
 
 urlpatterns += i18n_patterns(
-    path("jsi18n/", JavaScriptCatalog.as_view(), name="javascript-catalog"),
     path("", include("sites_conformes.core.urls")),
     prefix_default_language=False,
 )
 
+handler403 = partial(permission_denied, template_name=TEMPLATE_403)
 handler404 = partial(page_not_found, template_name=TEMPLATE_404)
 handler500 = partial(server_error, template_name=TEMPLATE_500)

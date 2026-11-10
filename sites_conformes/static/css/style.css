@@ -13,6 +13,14 @@ p:empty {
 .flex {
     display: flex;
 }
+
+/*** Fixes to wagtail-honeypot output ***/
+/* Its JS pushes the trap field past the right edge of the page
+   ("margin-left: 100%"), which adds a horizontal scrollbar: hide it on the left instead */
+input[data-whf_name] {
+    left: -10000px !important;
+    margin-left: 0 !important;
+}
 /*** Prefix the classes defined here with cmsfr- ***/
 
 /* Text alignment classes */
@@ -132,6 +140,20 @@ p:empty {
     aspect-ratio: initial !important;
 }
 
+/* Add some vertical spacing between blocks stacked within an adjustable column */
+.cmsfr-block-multicolumns [class*="fr-col"] > div + div {
+    margin-top: 1.5rem;
+}
+
+/* A lone tile/card in an adjustable column should fill its column height so
+   cards line up at equal height, like in a standard multi-column row. The
+   Wagtail block wrapper (.block-tile / .block-card) otherwise breaks DSFR's
+   height:100% chain between the column and the .fr-tile/.fr-card. */
+.cmsfr-block-multicolumns [class*="fr-col"] > .block-tile:only-child,
+.cmsfr-block-multicolumns [class*="fr-col"] > .block-card:only-child {
+    height: 100%;
+}
+
 .cmsfr-block-stepper dd {
     padding-left: 0;
 }
@@ -197,6 +219,12 @@ label.fr-tag[aria-pressed="false"] {
     --bg-default-grey: var(--background-contrast-grey);
     background-color: var(--bg-default-grey);
     color: var(--text-default-grey);
+}
+
+.cmsfr-hidden-checkbox {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* Custom styling for user menu */

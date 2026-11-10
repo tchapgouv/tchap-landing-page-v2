@@ -9,6 +9,10 @@ on:
       compare:
         required: true
         type: boolean
+      allow_visual_diff:
+        required: false
+        type: boolean
+        default: false
 
 env:
   DJANGO_SETTINGS_MODULE: config.settings_test
@@ -36,14 +40,14 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref }}
 
       # When running against main, overlay current-branch test files so both
       # baseline and comparison jobs use the same test definitions.
       - name: Checkout E2E files from PR branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.ref }}
           sparse-checkout: |
@@ -64,13 +68,18 @@ jobs:
           rm -rf __e2e_overlay__
 
       - name: Install just
-        uses: extractions/setup-just@v2
+        uses: extractions/setup-just@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v7
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gettext
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v10.3.0
 
       - name: Install Python dependencies
         run: uv sync --no-group dev
@@ -95,7 +104,7 @@ jobs:
 
       - name: Download baseline screenshots
         if: inputs.compare
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: regression-screenshots
           path: ${{ env.SCREENSHOTS_BASE_PATH }}
@@ -115,21 +124,33 @@ jobs:
       # tests execute for real and assert behavior on the new code;
       # @regression tests additionally assert their screenshot against the
       # baseline downloaded above (see fixtures.ts). NO --update-snapshots
-      # here, so a visual diff makes this step (and the job) fail.
+      # here, so a visual diff makes this step (and the job) fail — unless the
+      # PR carries the `visual-change` label (allow_visual_diff), in which case
+      # diffs are only reported (see fixtures.ts and the warning step below).
       - name: Run Playwright tests (full suite)
         if: inputs.compare
+        env:
+          ALLOW_VISUAL_DIFF: ${{ inputs.allow_visual_diff }}
         run: npx playwright test
+
+      - name: Warn about accepted visual diffs
+        if: inputs.compare && inputs.allow_visual_diff && !cancelled()
+        shell: bash
+        run: |
+          if find test-results -name '*-diff.png' 2>/dev/null | grep -q .; then
+            echo "::warning title=Visual diff::Visual differences were accepted via the visual-change label. Review the playwright-diffs-compare artifact."
+          fi
 
       - name: Upload baseline screenshots
         if: ${{ !inputs.compare }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: regression-screenshots
           path: ${{ env.SCREENSHOTS_BASE_PATH }}
 
       - name: Upload Playwright report
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report-${{ inputs.compare && 'compare' || 'baseline' }}
           path: playwright-report/
@@ -137,10 +158,11 @@ jobs:
 
       # On a comparison failure Playwright writes the expected/actual/diff PNGs
       # plus the error context under test-results/. Upload that whole tree so a
-      # visual regression is reviewable from the run page.
+      # visual regression is reviewable from the run page. Also uploaded when
+      # visual diffs were accepted, so they can still be reviewed.
       - name: Upload diff artifacts on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
+        if: failure() || (inputs.compare && inputs.allow_visual_diff && !cancelled())
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-diffs-${{ inputs.compare && 'compare' || 'baseline' }}
           path: test-results/

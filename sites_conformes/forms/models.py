@@ -1,9 +1,12 @@
 from django import forms
+from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 from dsfr.forms import DsfrBoundField, DsfrDjangoTemplates
 from dsfr.utils import dsfr_input_class_attr
 from modelcluster.fields import ParentalKey
+from wagtail.admin.mail import send_mail
 from wagtail.admin.panels import FieldPanel, FieldRowPanel, InlinePanel, MultiFieldPanel
 from wagtail.api import APIField
 from wagtail.contrib.forms.forms import BaseForm, FormBuilder
@@ -15,7 +18,12 @@ from wagtail.models import TranslatableMixin
 from wagtail_honeypot.models import HoneypotFormMixin, HoneypotFormSubmissionMixin
 from wagtail_localize.fields import SynchronizedField
 
-from sites_conformes.forms.widgets import CustomEmailInputWidget
+from sites_conformes.forms.autocomplete import (
+    AUTOCOMPLETE_CHOICES,
+    MANDATORY_AUTOCOMPLETE,
+    is_autocomplete_compatible,
+)
+from sites_conformes.forms.widgets import AutocompleteSelect, CustomEmailInputWidget
 
 
 class FormField(TranslatableMixin, AbstractFormField):
@@ -37,12 +45,47 @@ class FormField(TranslatableMixin, AbstractFormField):
     page = ParentalKey("FormPage", on_delete=models.CASCADE, related_name="form_fields")
 
     field_type = models.CharField(verbose_name=_("Field type"), max_length=16, choices=CHOICES)
+    # field_type must be populated for previews to build the form field (as in AbstractFormField).
+    field_type.required_on_save = True
+
+    autocomplete = models.CharField(
+        verbose_name=_("Autocomplete"),
+        max_length=32,
+        blank=True,
+        choices=AUTOCOMPLETE_CHOICES,
+        help_text=_(
+            "Purpose of the field, allowing browsers to fill it automatically. "
+            "Only the values relevant to the field type are available."
+        ),
+    )
+
+    panels = [
+        FieldPanel("label"),
+        FieldPanel("help_text"),
+        FieldPanel("required"),
+        FieldPanel("field_type", classname="formbuilder-type"),
+        FieldPanel("autocomplete", widget=AutocompleteSelect, classname="formbuilder-autocomplete"),
+        FieldPanel("choices", classname="formbuilder-choices"),
+        FieldPanel("default_value", classname="formbuilder-default"),
+    ]
+
+    api_fields = AbstractFormField.api_fields + [APIField("autocomplete")]
 
     # clean_name is a technical slug derived from the label and used as the HTML field name.
     # It must stay identical across locales so form submissions can be processed correctly.
     override_translatable_fields = [
         SynchronizedField("clean_name", overridable=False),
+        SynchronizedField("autocomplete", overridable=False),
     ]
+
+    def clean(self):
+        super().clean()
+        if not self.autocomplete and self.field_type in MANDATORY_AUTOCOMPLETE:
+            self.autocomplete = MANDATORY_AUTOCOMPLETE[self.field_type]
+        if self.autocomplete and not is_autocomplete_compatible(self.autocomplete, self.field_type):
+            raise ValidationError(
+                {"autocomplete": _("This autocomplete value is not compatible with the selected field type.")}
+            )
 
     def save(self, *args, **kwargs):
         # Guarantee clean_name is always set, even if pk is already assigned (e.g. when
@@ -79,6 +122,10 @@ class SitesFacilesCustomForm(BaseForm):
 
 
 class SitesFacilesFormBuilder(FormBuilder):
+    def __init__(self, fields):
+        # Ignore fields without a type (e.g. being added in the editor) instead of crashing previews
+        super().__init__([field for field in fields if field.field_type])
+
     def create_date_field(self, field, options):
         options["widget"] = forms.DateInput(attrs={"type": "date"})
         return forms.DateField(**options)
@@ -91,6 +138,16 @@ class SitesFacilesFormBuilder(FormBuilder):
     def create_email_field(self, field, options):
         options["widget"] = CustomEmailInputWidget
         return super().create_email_field(field, options)
+
+    @property
+    def formfields(self):
+        formfields = super().formfields
+        for field in self.fields:
+            autocomplete = getattr(field, "autocomplete", "")
+            if autocomplete:
+                clean_name = field.clean_name or field.get_field_clean_name()
+                formfields[clean_name].widget.attrs["autocomplete"] = autocomplete
+        return formfields
 
     def get_form_class(self):
         return type("WagtailForm", (SitesFacilesCustomForm,), self.formfields)
@@ -146,3 +203,36 @@ class FormPage(HoneypotFormMixin, HoneypotFormSubmissionMixin, AbstractEmailForm
         Returns True if all fields in the form are mandatory.
         """
         return all(field.get("required", False) for field in self.form_fields.values())
+
+    def get_automatic_email_notice(self):
+        """
+        Notice added at the top of the notification e-mail, telling editors the message is
+        automatic and that replying to it answers the person who submitted the form.
+        """
+        return _(
+            "This message was generated automatically following the submission of a form on your "
+            "website %(site_name)s. If you reply to this e-mail, your answer will be sent directly "
+            "to the person who submitted the form."
+        ) % {"site_name": settings.WAGTAIL_SITE_NAME}
+
+    def render_email(self, form):
+        return f"{self.get_automatic_email_notice()}\n\n{super().render_email(form)}"
+
+    def send_mail(self, form):
+        """
+        Same as Wagtail's AbstractEmailForm.send_mail, but sets Reply-To to the e-mail
+        addresses submitted in the form's "email" fields. This way editors replying to
+        the notification answer the person who filled the form, not the site address.
+        """
+        addresses = [x.strip() for x in self.to_address.split(",")]
+
+        email_field_names = [field.clean_name for field in self.form_fields.all() if field.field_type == "email"]
+        reply_to = [form.cleaned_data[name] for name in email_field_names if form.cleaned_data.get(name)]
+
+        send_mail(
+            self.subject,
+            self.render_email(form),
+            addresses,
+            self.from_address,
+            reply_to=reply_to or None,
+        )

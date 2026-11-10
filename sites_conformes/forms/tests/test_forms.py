@@ -1,10 +1,22 @@
+import re
+import time
+
+from django.conf import settings
+from django.contrib.auth.models import AnonymousUser
+from django.core import mail
+from django.core.exceptions import ValidationError
 from django.core.management import call_command
-from django.test import SimpleTestCase
-from django.urls import reverse
+from django.test import RequestFactory, SimpleTestCase
 from dsfr.forms import DsfrBoundField
 from wagtail.test.utils import WagtailPageTestCase
 from wagtail_localize.models import TranslationSource
 
+from sites_conformes.core.views import SearchResultsView
+from sites_conformes.forms.autocomplete import (
+    AUTOCOMPLETE_FIELD_TYPES,
+    AUTOCOMPLETE_TOKENS,
+    get_autocomplete_choices_for,
+)
 from sites_conformes.forms.models import FormField, FormPage, SitesFacilesFormBuilder
 
 
@@ -35,6 +47,90 @@ class FormsTestCase(WagtailPageTestCase):
             "<p>Merci pour votre message ! Nous reviendrons vers vous rapidement.</p>",
         )
 
+    def test_submission_email_starts_with_automatic_notice(self):
+        """
+        The notification e-mail sent to the site administrator must start with a notice
+        explaining the message is automatic and should not be replied to, so that editors
+        do not answer the site address instead of the person who submitted the form.
+        """
+        form_page = FormPage.objects.first()
+        form_page.to_address = "admin@example.org"
+        form_page.from_address = "no-reply@example.org"
+        form_page.subject = "Nouveau message"
+        form_page.save()
+
+        post_data = {
+            "votre_nom_complet": "Félix Faure",
+            "votre_adresse_electronique": "no7@elysee.fr",
+            "titre_de_votre_message": "Ma connaissance",
+            "votre_message": "S’est enfuie par l’escalier !",
+            # Honeypot fields (enabled by default): empty name + a submission time
+            # older than the required interval, so the submission is not treated as spam.
+            "whf_name": "",
+            "whf_time": str(int(time.time()) - 60),
+        }
+        response = self.client.post(form_page.url, post_data)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(mail.outbox), 1)
+
+        body = mail.outbox[0].body
+        notice = form_page.get_automatic_email_notice()
+        # The notice comes first, before the form content.
+        self.assertTrue(body.startswith(notice))
+        self.assertIn(settings.WAGTAIL_SITE_NAME, notice)
+        # The submitted form content is still present.
+        self.assertIn("Votre nom complet: Félix Faure", body)
+        self.assertLess(body.index(notice), body.index("Votre nom complet"))
+
+    def test_submission_email_reply_to_is_submitter_address(self):
+        """
+        The notification e-mail must set Reply-To to the address entered in the form's
+        e-mail field, so replying answers the person who submitted the form rather than
+        the site's own address.
+        """
+        form_page = FormPage.objects.first()
+        form_page.to_address = "admin@example.org"
+        form_page.from_address = "no-reply@example.org"
+        form_page.subject = "Nouveau message"
+        form_page.save()
+
+        post_data = {
+            "votre_nom_complet": "Félix Faure",
+            "votre_adresse_electronique": "no7@elysee.fr",
+            "titre_de_votre_message": "Ma connaissance",
+            "votre_message": "S’est enfuie par l’escalier !",
+            "whf_name": "",
+            "whf_time": str(int(time.time()) - 60),
+        }
+        response = self.client.post(form_page.url, post_data)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(mail.outbox), 1)
+
+        message = mail.outbox[0]
+        self.assertEqual(message.reply_to, ["no7@elysee.fr"])
+        self.assertEqual(message.from_email, "no-reply@example.org")
+
+    def test_submitted_form_shows_focused_success_alert(self):
+        form_page = FormPage.objects.first()
+        post_data = {
+            "votre_nom_complet": "Félix Faure",
+            "votre_adresse_electronique": "no7@elysee.fr",
+            "titre_de_votre_message": "Ma connaissance",
+            "votre_message": "S’est enfuie par l’escalier !",
+        }
+        response = self.client.post(form_page.url, post_data)
+
+        self.assertContains(
+            response,
+            """<div class="fr-alert fr-alert--success fr-my-4w" role="alert" tabindex="-1" autofocus>
+              <h2 class="fr-alert__title">Succès</h2>
+              <p>Votre formulaire a été envoyé.</p>
+            </div>""",
+            html=True,
+        )
+
     def test_incorrect_form_is_rejected(self):
         form_page = FormPage.objects.first()
         post_data = {
@@ -57,6 +153,40 @@ class FormsTestCase(WagtailPageTestCase):
             r"<li class=\"fr-error-text\">(\\n)?\s*(Ce champ est requis|Ce champ est obligatoire)\.(\\n)?\s*<\/li>",
         )
         # Updates sometimes mess with the order of the translations and so the displayed translation. Both are fine.
+
+    def test_form_disables_native_browser_validation(self):
+        # Native validation only flags the first invalid field: let the server display all the errors at once
+        form_page = FormPage.objects.first()
+        response = self.client.get(form_page.url)
+
+        self.assertRegex(response.content.decode(), r"<form [^>]*novalidate")
+
+    def test_form_fields_have_autocomplete_attributes(self):
+        form_page = FormPage.objects.first()
+        response = self.client.get(form_page.url)
+        content = response.content.decode()
+
+        self.assertRegex(content, r'<input [^>]*name="votre_nom_complet"[^>]*autocomplete="name"')
+        self.assertRegex(content, r'<input [^>]*name="votre_adresse_electronique"[^>]*autocomplete="email"')
+        self.assertRegex(content, r'<input [^>]*name="votre_numero_de_telephone"[^>]*autocomplete="tel"')
+
+    def test_empty_form_shows_all_errors(self):
+        form_page = FormPage.objects.first()
+        post_data = {
+            "votre_nom_complet": "",
+            "votre_adresse_electronique": "",
+            "titre_de_votre_message": "",
+            "votre_message": "",
+        }
+        response = self.client.post(form_page.url, post_data)
+
+        self.assertEqual(response.status_code, 200)
+
+        errors = re.findall(
+            r"<li class=\"fr-error-text\">\s*(?:Ce champ est requis|Ce champ est obligatoire)\.\s*</li>",
+            response.content.decode(),
+        )
+        self.assertEqual(len(errors), len(post_data))
 
     def test_form_field_clean_name_set_on_save(self):
         """
@@ -120,8 +250,14 @@ class FormsTestCase(WagtailPageTestCase):
     def test_form_page_is_found_in_search_results(self):
         call_command("update_index")
 
-        search_url = reverse("cms_search")
-        response = self.client.get(f"{search_url}?q=contact")
+        # Call the default search view by hand instead of using client.get(reverse("cms_search")).
+        # This is because a custom search view could be registered, and it would change the content
+        # of the search results and their page template.
+        factory = RequestFactory()
+        request = factory.get("/search/", {"q": "contact"})
+        request.user = AnonymousUser()
+        response = SearchResultsView.as_view()(request)
+        response.render()
 
         self.assertEqual(response.status_code, 200)
         self.assertInHTML("""<a href="/contact/">Contact</a>""", response.content.decode())
@@ -161,3 +297,65 @@ class SitesFacilesCustomFormDsfrRenderingTestCase(SimpleTestCase):
         html = str(bound_field.as_field_group())
         self.assertIn("fr-fieldset", html)
         self.assertIn("fr-radio-group", html)
+
+
+class FormFieldAutocompleteTestCase(SimpleTestCase):
+    def build_form(self, *fields):
+        return SitesFacilesFormBuilder(list(fields)).get_form_class()()
+
+    def test_autocomplete_attribute_is_rendered(self):
+        field = FormField(field_type="singleline", label="Prénom", autocomplete="given-name")
+        form = self.build_form(field)
+
+        self.assertIn('autocomplete="given-name"', str(form["prenom"]))
+
+    def test_empty_autocomplete_is_not_rendered(self):
+        field = FormField(field_type="singleline", label="Titre")
+        form = self.build_form(field)
+
+        self.assertNotIn("autocomplete=", str(form["titre"]))
+
+    def test_email_field_defaults_to_email_autocomplete(self):
+        field = FormField(field_type="email", label="Courriel")
+        form = self.build_form(field)
+
+        self.assertIn('autocomplete="email"', str(form["courriel"]))
+
+    def test_incompatible_autocomplete_is_rejected(self):
+        field = FormField(field_type="email", label="Courriel", autocomplete="name")
+
+        with self.assertRaises(ValidationError) as context:
+            field.clean()
+        self.assertIn("autocomplete", context.exception.message_dict)
+
+    def test_compatible_autocomplete_is_accepted(self):
+        field = FormField(field_type="multiline", label="Adresse", autocomplete="street-address")
+        field.clean()
+
+    def test_empty_autocomplete_is_accepted_except_for_email(self):
+        for field_type, _label in FormField.CHOICES:
+            field = FormField(field_type=field_type, label="Champ")
+            field.clean()
+            expected = "email" if field_type == "email" else ""
+            self.assertEqual(field.autocomplete, expected, field_type)
+
+    def test_autocomplete_mapping_is_consistent(self):
+        field_types = {field_type for field_type, _label in FormField.CHOICES}
+        self.assertEqual(len(AUTOCOMPLETE_TOKENS), len(set(AUTOCOMPLETE_TOKENS)))
+        self.assertEqual(set(AUTOCOMPLETE_TOKENS), set(AUTOCOMPLETE_FIELD_TYPES))
+        for token, compatible_types in AUTOCOMPLETE_FIELD_TYPES.items():
+            self.assertTrue(compatible_types, token)
+            self.assertLessEqual(compatible_types, field_types, token)
+
+    def test_choice_fields_have_no_autocomplete(self):
+        for field_type in ("checkbox", "checkboxes", "radio", "hidden"):
+            self.assertEqual(get_autocomplete_choices_for(field_type), [], field_type)
+        self.assertEqual(get_autocomplete_choices_for("email"), ["email"])
+
+    def test_field_without_type_is_ignored(self):
+        # A field being added in the editor has no type yet: previews must not crash
+        untyped = FormField(field_type="", label="Sans type")
+        typed = FormField(field_type="singleline", label="Avec type")
+        form = self.build_form(untyped, typed)
+
+        self.assertEqual(list(form.fields), ["avec_type"])

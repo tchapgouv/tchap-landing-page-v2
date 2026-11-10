@@ -75,7 +75,7 @@ class RecentEntriesStructValue(blocks.StructValue):
         """
         Used for the filters section titles
         """
-        heading_tag = self.get("heading_tag")
+        heading_tag = self.get("heading_tag") or "h2"
         if heading_tag == "h2":
             return "h3"
         elif heading_tag == "h3":
@@ -84,6 +84,15 @@ class RecentEntriesStructValue(blocks.StructValue):
             return "h5"
         else:
             return "h6"
+
+    def card_heading_tag(self):
+        """
+        Used for the entry cards titles: one level below the block title,
+        or at the level of the block title if it is not displayed
+        """
+        if self.get("title"):
+            return self.sub_heading_tag()
+        return self.get("heading_tag") or "h2"
 
 
 class BlogRecentEntriesStructValue(RecentEntriesStructValue):
@@ -125,7 +134,7 @@ class BlogRecentEntriesBlock(blocks.StructBlock):
         default=_("See all posts"),
     )
     is_see_all_link_filtered = BooleanBlock(
-        label=_('Apply filters in the "See all posts" page'),
+        label=_("Keep the filters when opening the page listing all posts"),
         default=False,
         required=False,
     )
@@ -147,7 +156,7 @@ class BlogRecentEntriesBlock(blocks.StructBlock):
                 "show_filters",
                 BlockGroup(
                     children=["see_all_button_text", "is_see_all_link_filtered"],
-                    heading=_("“See all posts” button"),
+                    heading=_("Block button"),
                 ),
             ],
         )
@@ -192,7 +201,7 @@ class EventsRecentEntriesBlock(blocks.StructBlock):
         default=_("See all events"),
     )
     is_see_all_link_filtered = BooleanBlock(
-        label=_('Apply filters in the "See all events" page'),
+        label=_("Keep the filters when opening the page listing all events"),
         default=False,
         required=False,
     )
@@ -214,7 +223,7 @@ class EventsRecentEntriesBlock(blocks.StructBlock):
                 "show_filters",
                 BlockGroup(
                     children=["see_all_button_text", "is_see_all_link_filtered"],
-                    heading=_("“See all events” button"),
+                    heading=_("Block button"),
                 ),
             ],
         )

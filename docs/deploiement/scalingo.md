@@ -42,6 +42,12 @@ sans S3, les images ajoutées disparaîtraient à la prochaine mise à jour.
 On le configure à l’étape 2c.
 :::
 
+:::{tip}
+Vous pouvez déployer en un clic via le bouton ci-dessous :
+
+[![Déployer sur Scalingo](../_static/scalingo-deploy-button.svg)](https://dashboard.scalingo.com/create/app?source=https://github.com/numerique-gouv/sites-conformes#production)
+:::
+
 ## Étape 1 — Créer l’application et sa base de données
 
 Tout se passe dans votre navigateur, sur le tableau de bord Scalingo.
@@ -118,7 +124,7 @@ Le tableau indique exactement quoi taper dans la colonne « valeur » :
 
 | Nom du réglage (à gauche) | Valeur à taper (à droite) ou exemple | À quoi ça sert ? |
 | --- | --- | --- |
-| 🔴 `HOST_URL` | Exemple : `test-sites-faciles.osc-fr1.scalingo.io` | le nom de domaine de l’URL principale de votre site |
+| 🔴 `HOST_URL` | Exemple : `test-sites-faciles.osc-fr1.scalingo.io` | le nom de domaine de l’URL principale de votre site. Remplacez-le par le domaine définitif dès qu’il est branché (voir {ref}`scalingo-domaine-definitif`) |
 | 🔴 `ALLOWED_HOSTS` | Exemple : `test-sites-faciles.osc-fr1.scalingo.io,test-sites-faciles.numerique.gouv.fr` | le ou les domaines autorisés à accéder au site, séparés par des virgules s’il y en a plusieurs. On peut déjà entrer le domaine définitif si on le connaît |
 | 🔴 `SECRET_KEY` | *(voir encart ci-dessous)* | clé secrète, par exemple générée dans un terminal (rapprochez-vous d’un utilisateur technique pour cette étape) |
 | 🔴 `DATABASE_URL` | *(rempli automatiquement)* | Ce paramètre a normalement été rempli automatiquement par Scalingo à l’étape 1, vérifiez que c’est bien le cas |
@@ -280,7 +286,7 @@ avec votre compte Scalingo.
 commande, après avoir remplacé `mon-site` par le nom de votre application :
 
 ```sh
-scalingo -a mon-site run python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+scalingo -a mon-site run 'python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"'
 ```
 
 Une longue suite de 50 caractères s’affiche : copiez-la, retournez dans l’onglet
@@ -301,7 +307,7 @@ Initialiser le contenu du site en faisant passer ces commandes via la CLI Scalin
 
 ```sh
 scalingo -a ${APP_NAME} run python manage.py migrate
-scalingo -a ${APP_NAME} run python manage.py collectstatic --noinput --ignore="*.sass"
+scalingo -a ${APP_NAME} run 'python manage.py collectstatic --noinput --ignore="*.sass"'
 scalingo -a ${APP_NAME} run python manage.py set_config
 scalingo -a ${APP_NAME} run python manage.py import_dsfr_pictograms
 scalingo -a ${APP_NAME} run python manage.py create_starter_pages
@@ -314,11 +320,42 @@ scalingo -a ${APP_NAME} run python manage.py create_starter_pages
 normalement que les commandes ci-dessus à exécuter vous-même. Si jamais une
 commande devait être relancée manuellement, elle se présenterait sous la même
 forme : `scalingo -a mon-site run python manage.py <nom-de-la-commande>`.
+Si la commande comporte des options (commençant par `-` ou `--`), mettez-la
+entre guillemets pour que la CLI Scalingo ne les interprète pas :
+`scalingo -a mon-site run "python manage.py <nom-de-la-commande> --option"`.
 :::
 
 Votre site est maintenant en ligne à l’adresse définie dans `HOST_URL`,
 et son administration est accessible par défaut à l’adresse de votre site
 suivie de `/cms-admin/`.
+
+(scalingo-domaine-definitif)=
+
+## Utiliser votre nom de domaine définitif
+
+Au départ, le site est joignable à une adresse en `*.scalingo.io`. Quand votre
+nom de domaine définitif (par exemple `mon-site.gouv.fr`) est prêt, suivez les
+étapes ci-dessous (voir aussi {doc}`changer-nom-de-domaine` pour les explications
+et les vérifications à faire ensuite) :
+
+1. ajoutez-le dans le tableau de bord Scalingo, onglet **« Paramètres » →
+   « Routage public »**, puis configurez le domaine en suivant la
+   [documentation de Scalingo](https://doc.scalingo.com/platform/app/domain) ;
+2. ajoutez-le à `ALLOWED_HOSTS` (vous pouvez garder l’adresse `*.scalingo.io`
+   à côté, séparée par une virgule) ;
+3. **remplacez la valeur de `HOST_URL`** par ce domaine (nom de domaine seul, sans
+   `https://`) ;
+4. répercutez le domaine en base de données :
+
+```sh
+scalingo -a ${APP_NAME} run python manage.py set_config
+```
+
+:::{warning}
+Si `HOST_URL` contient toujours l’adresse `*.scalingo.io`, les liens générés par
+le site l’utiliseront encore : e-mails de réinitialisation de mot de passe et de
+notification, plan du site, adresses absolues des pages…
+:::
 
 ## Indexation des contenus
 
@@ -383,3 +420,43 @@ qui ne sont pas touchés par une mise à jour du code.
 automatiquement par la plateforme. Vous pouvez consulter et télécharger ces
 sauvegardes depuis l’interface de l’addon PostgreSQL, dans votre navigateur.
 Voir aussi {doc}`../donnees/sauvegarde-restauration`.
+:::
+
+## Revenir à une version précédente
+
+:::{important}
+Ce script est encore expérimental, si vous rencontrez des problèmes,
+remontez-les nous.
+:::
+
+Si une mise à jour pose problème, la recette `just scalingo-rollback` remet
+l’application dans l’état d’une sauvegarde de la base de données,
+et redéploie le code d’une version donnée :
+
+```sh
+just scalingo-rollback <nom-de-l-app> [région] [version]
+# par exemple :
+just scalingo-rollback mon-site - v4.2.0
+```
+
+La version est un tag, une branche ou un commit du dépôt. Par défaut, c’est le code
+du dernier déploiement réussi avant la sauvegarde choisie : un code plus ancien
+peut ne pas savoir lire le contenu de la sauvegarde. La région est par défaut `osc-fr1`,
+`-` permet de garder cette valeur par défaut tout en précisant une version.
+
+Le script, qui nécessite la CLI Scalingo, `psql`, `pg_restore`
+et la variable `BACKUP_DIR` (voir {doc}`../donnees/sauvegarde-restauration`) :
+
+1. liste les derniers déploiements et les sauvegardes disponibles,
+et vous demande laquelle restaurer ;
+2. télécharge cette sauvegarde et repère les tables créées depuis
+(par des migrations plus récentes), qui seront supprimées ;
+3. après confirmation, crée une sauvegarde de sécurité de l’état actuel,
+arrête les conteneurs web, restaure la sauvegarde, redéploie la version
+demandée puis relance les conteneurs.
+
+:::{warning}
+Les modifications de contenu faites depuis la sauvegarde choisie sont perdues.
+Si le déploiement automatique depuis GitHub est activé,
+le prochain push sur la branche liée redéploiera le code correspondant.
+:::

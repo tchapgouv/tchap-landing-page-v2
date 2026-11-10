@@ -1,9 +1,10 @@
 [project]
 name = "sites-conformes"
-# Version is driven by the GitHub Release tag at publish time. See
-# .github/workflows/publish.yml, which writes sites_conformes/_version.py
-# from github.event.release.tag_name (stripped of a leading "v").
-# The committed _version.py value is the local/dev fallback.
+# Version is read from sites_conformes/_version.py, which is bumped by hand and
+# committed before cutting the matching GitHub Release: source-based deployments
+# (Scalingo, internal server, Docker) read it from there. At publish time,
+# .github/workflows/publish.yml rewrites it from the release tag (stripped of a
+# leading "v") before building the wheel, so the tag and _version.py must match.
 dynamic = ["version"]
 description = "Gestionnaire de contenu permettant de créer et gérer un site internet basé sur le Système de design de l’État, accessible et responsive"
 authors = [
@@ -61,7 +62,7 @@ dev = [
     "djlint>=1.36.4",
     "factory-boy>=3.3.3",
     "ipython>=9.3.0",
-    "pre-commit>=4.2.0",
+    "prek>=0.5.5",
     "ruff>=0.12.0",
     "tblib>=3.1.0",
     "wagtail-factories>=4.5.0",
@@ -115,8 +116,11 @@ omit = [
     "*/tests/*.py",
 ]
 
+# Keep in sync with [tool.djlint] in demo/pyproject.toml.
 [tool.djlint]
+profile = "django"
 max_blank_lines = 1
+blank_line_after_tag = "load"
 ignore = "H030,H031,H006,D018,T003"
 indent = 2
 
@@ -177,6 +181,19 @@ ignore = ["E203", "E266"]
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
+
+# Dependency cooldown: ignore PyPI releases newer than this window so CVEs and
+# supply-chain advisories have time to surface before we adopt a version.
+# Re-run `uv lock` after changing this value.
+[tool.uv]
+required-version = ">=0.9.17"
+exclude-newer = "7 days"
+# Per-package opt-out: set a package to false to bypass the cooldown for an
+# urgent security fix published inside the window. Example:
+# exclude-newer-package = { wagtail = false }
+# Bypass cooldown for security fixes (pillow 13.0.0: GHSA-8g5g-8vmr-9782 et al.;
+# certifi 2026.10.19: PYSEC-2026-4320). Remove once both are older than 7 days.
+exclude-newer-package = { pillow = false, certifi = false }
 
 [tool.deptry]
 # demo/ is a separate project with its own pyproject.toml/dependencies.

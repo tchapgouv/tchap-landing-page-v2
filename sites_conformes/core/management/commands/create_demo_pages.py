@@ -223,6 +223,7 @@ class Command(BaseCommand):
             {
                 "sort_order": 2,
                 "clean_name": "adresse_email",
+                "autocomplete": "email",
                 "label": "Adresse email",
                 "required": True,
                 "page": form_page,
@@ -240,6 +241,7 @@ class Command(BaseCommand):
             {
                 "sort_order": 4,
                 "clean_name": "url",
+                "autocomplete": "url",
                 "label": "URL",
                 "required": True,
                 "page": form_page,
@@ -354,15 +356,18 @@ class Command(BaseCommand):
         text = "".join(f"<p>{p}</p>" for p in fake.paragraphs(nb=3))
         body.append(("paragraph", RichText(text)))
 
-        # image (CenteredImageBlock - ImageChooserBlock)
+        # image (CenteredImageBlock)
         body.append(
             (
                 "image",
                 {
                     "title": fake.sentence(nb_words=4),
                     "heading_tag": "h3",
-                    "image": img_femme,
-                    "alt": "Une femme devant un ordinateur",
+                    "image": {
+                        "image": img_femme,
+                        "alt_text": "Une femme devant un ordinateur",
+                        "decorative": False,
+                    },
                     "caption": fake.sentence(nb_words=6),
                     "width": "",
                     "image_ratio": "",
@@ -732,7 +737,7 @@ class Command(BaseCommand):
                     "title": fake.sentence(nb_words=4),
                     "heading_tag": "h3",
                     "description": RichText(f"<p>{fake.sentence()}</p>"),
-                    "image": img_error,
+                    "image": {"image": img_error, "alt_text": "", "decorative": True},
                     "link": {
                         "link_type": "external_url",
                         "external_url": fake.url(),
@@ -845,7 +850,7 @@ class Command(BaseCommand):
                                 "title": fake.sentence(nb_words=3),
                                 "heading_tag": "h3",
                                 "description": RichText(f"<p>{fake.sentence()}</p>"),
-                                "image": img_error,
+                                "image": {"image": img_error, "alt_text": "", "decorative": True},
                                 "link": {
                                     "link_type": "external_url",
                                     "external_url": fake.url(),
@@ -869,7 +874,7 @@ class Command(BaseCommand):
                                 "title": fake.sentence(nb_words=3),
                                 "heading_tag": "h3",
                                 "description": RichText(f"<p>{fake.sentence()}</p>"),
-                                "image": img_error,
+                                "image": {"image": img_error, "alt_text": "", "decorative": True},
                                 "link": {
                                     "link_type": "external_url",
                                     "external_url": fake.url(),

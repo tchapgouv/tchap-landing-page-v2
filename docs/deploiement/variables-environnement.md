@@ -141,6 +141,8 @@ Tout ce bloc n’est lu que si `PROCONNECT_ACTIVATED` vaut `True`.
 | `WAGTAILADMIN_PATH` | Adresse de la page d’administration. | `cms-admin/` | ⚪ |
 | `SF_DISABLE_TUTORIALS` | Masque le panneau de tutoriels dans le back-office. | `False` | ⚪ |
 | `SF_SCHEME_DEPENDENT_SVGS` | Adapte les SVG au thème clair/sombre. | `False` | ⚪ |
+| `SF_NOINDEX` | Demande aux moteurs de recherche de ne pas indexer le site (en-tête `X-Robots-Tag: noindex, nofollow`). | `False` | ⚪ |
+| `SF_PUBLIC_CACHE_MAX_AGE` | Durée (en secondes) pendant laquelle le navigateur et le CDN peuvent mettre en cache les pages vues par les visiteurs anonymes (en-tête `Cache-Control: public, max-age=…`, sans `Vary: Cookie`). Les réponses qui déposent un cookie (formulaires) et l’administration ne sont jamais mises en cache ; les visiteurs connectés reçoivent `Cache-Control: private`, mais peuvent voir la version anonyme servie par le CDN pendant cette durée. `0` désactive. | `0` | ⚪ |
 | `WAGTAILDOCS_MAX_UPLOAD_SIZE` | Taille maximale des documents téléversés (en octets). | `10485760` (10 Mo) | ⚪ |
 | `DSFR_USE_INTEGRITY_CHECKSUMS` | Active les sommes de contrôle d’intégrité du DSFR (peut entrer en conflit avec WhiteNoise). | `False` | ⚪ |
 | `DSFR_MARK_OPTIONAL_FIELDS` | Marque les champs optionnels (plutôt que les champs obligatoires) dans les formulaires DSFR. | `True` | ⚪ |
@@ -160,10 +162,29 @@ surcharger pour les forks du projet.
 | `LATEST_RELEASE_URL` | Endpoint de l’API GitHub utilisé pour détecter la dernière version publiée. | API GitHub releases du dépôt | ⚪ |
 | `RELEASES_URL` | Page de releases liée depuis la notification de nouvelle version. | Page releases GitHub du dépôt | ⚪ |
 
+## Serveur applicatif (Gunicorn)
+
+Ces réglages sont lus par `gunicorn.conf.py` à la racine du dépôt, chargé
+automatiquement par Gunicorn quel que soit le mode de lancement (Procfile,
+Docker, systemd, `just run_gunicorn`). Fonctionnement et effet sur la mémoire :
+{doc}`gunicorn`.
+
+| Variable | Rôle | Défaut | Niveau |
+| --- | --- | --- | --- |
+| `GUNICORN_WORKERS` | Nombre de processus. À défaut, `WEB_CONCURRENCY` (défini par Scalingo) est utilisé. | `2` | ⚪ |
+| `GUNICORN_THREADS` | Nombre de threads par processus. | `1` | ⚪ |
+| `GUNICORN_TIMEOUT` | Délai (en secondes) avant qu’un processus bloqué soit redémarré. | `120` | ⚪ |
+| `GUNICORN_MAX_REQUESTS` | Nombre de requêtes traitées avant redémarrage d’un processus (limite les fuites mémoire). | `10000` | ⚪ |
+| `GUNICORN_MAX_REQUESTS_JITTER` | Aléa ajouté à `GUNICORN_MAX_REQUESTS` pour étaler les redémarrages. | `2500` | ⚪ |
+
 ## Supervision des erreurs (Sentry)
+
+Mode d’emploi complet : {doc}`sentry`.
 
 | Variable | Rôle | Défaut | Niveau |
 | --- | --- | --- | --- |
 | `SENTRY_DSN` | Adresse du projet Sentry. Sa présence active la remontée d’erreurs. | *(vide)* | ⚪ |
 | `SENTRY_ENVIRONMENT` | Nom de l’environnement signalé à Sentry. | `production` | ⚪ |
-| `SENTRY_USE_DEBUG_URL` | Activation de l’URL de test d’activation de Sentry | `False` | ⚪ |
+| `SENTRY_SEND_DEFAULT_PII` | Joint des données personnelles aux rapports (adresse IP, utilisateur connecté, cookies). Voir {doc}`sentry`. | `False` | ⚪ |
+| `SENTRY_TRACES_SAMPLE_RATE` | Proportion des requêtes mesurées pour le suivi des performances (entre `0` et `1`, par exemple `0.1`). Non définie : suivi désactivé. Voir {doc}`sentry`. | *(vide)* | ⚪ |
+| `SENTRY_USE_DEBUG_URL` | Active l’URL `/sentry-debug/`, qui déclenche volontairement une erreur pour tester Sentry. À désactiver après usage. | `False` | ⚪ |
